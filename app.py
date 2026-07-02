@@ -184,7 +184,12 @@ if st.session_state.view == "overview":
     if cards_ready and st.session_state.roster_grade is None:
         with st.spinner("Computing overall roster grade..."):
             valid_cards = [c for c in st.session_state.player_cards.values() if "error" not in c]
-            st.session_state.roster_grade = asyncio.run(run_roster_agent(valid_cards))
+            try:
+                st.session_state.roster_grade = asyncio.run(run_roster_agent(valid_cards))
+            except Exception as e:
+                st.error(f"Couldn't compute the overall roster grade: {e}")
+                if st.button("🔄 Retry roster grade"):
+                    st.rerun()
 
     render_team_report_banner(st.session_state.roster_grade, len(st.session_state.player_cards), len(players))
 
@@ -328,7 +333,11 @@ elif st.session_state.view == "trade":
         if st.button("🔍 Find Sell Candidates", use_container_width=True):
             with st.spinner("Analyzing roster for sell signals..."):
                 valid_cards = [c for c in st.session_state.player_cards.values() if "error" not in c]
-                st.session_state.trade_report = asyncio.run(run_trade_agent(valid_cards))
+                try:
+                    st.session_state.trade_report = asyncio.run(run_trade_agent(valid_cards))
+                except Exception as e:
+                    st.error(f"Couldn't run the trade analysis: {e}")
+                    st.stop()
             st.rerun()
         st.stop()
 
