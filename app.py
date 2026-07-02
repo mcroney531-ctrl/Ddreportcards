@@ -105,7 +105,8 @@ def _run_all_report_cards():
     progress = st.progress(0.0, text="Generating report cards...")
     for i, p in enumerate(players):
         pid = p["player_id"]
-        if pid not in st.session_state.player_cards:
+        existing = st.session_state.player_cards.get(pid)
+        if existing is None or "error" in existing:
             progress.progress(i / len(players), text=f"Grading {p.get('full_name')}...")
             try:
                 card = asyncio.run(run_synthesis_agent(pid))
@@ -252,8 +253,11 @@ elif st.session_state.view == "player":
     st.divider()
 
     card = st.session_state.player_cards.get(pid)
-    if card is None:
-        if st.button("Generate Report Card"):
+    if card is None or "error" in card:
+        if card is not None:
+            st.error(f"Report card generation failed: {card['error']}")
+        btn_label = "🔄 Retry Report Card" if card is not None else "Generate Report Card"
+        if st.button(btn_label):
             with st.spinner(f"Grading {player.get('full_name')}..."):
                 try:
                     card = asyncio.run(run_synthesis_agent(pid))
@@ -262,10 +266,6 @@ elif st.session_state.view == "player":
                     st.error(f"Pipeline error: {e}")
                     st.stop()
             st.rerun()
-        st.stop()
-
-    if "error" in card:
-        st.error(f"Report card generation failed: {card['error']}")
         st.stop()
 
     st.markdown(
