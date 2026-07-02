@@ -22,7 +22,7 @@ from google.adk.runners import Runner
 from google.adk.sessions import InMemorySessionService
 from google.genai import types as genai_types
 
-from data import sleeper_client, espn_client, fantasycalc_client
+from data import sleeper_client, espn_client, fantasycalc_client, leaguelogs_client
 
 # ── Age-curve calibration (position-specific dynasty decline windows) ─────────
 
@@ -54,12 +54,16 @@ def lookup_player_info(player_id: str) -> dict:
     if not p:
         return {"error": f"No Sleeper player found for player_id={player_id!r}"}
 
-    # Sleeper's espn_id is null for some recent rookies — FantasyCalc carries
-    # the same id as a reliable fallback since it's matched by sleeperId.
+    # Sleeper's espn_id is null for some recent rookies — FantasyCalc and
+    # LeagueLogs each carry their own ESPN sync as fallbacks, both matched
+    # by sleeperId. Deep-roster players can still come back null from all
+    # three; that's a legitimate "no ESPN data" case, not a bug.
     espn_id = p.get("espn_id")
     if not espn_id:
         fc = fantasycalc_client.get_value_for_sleeper_id(player_id)
         espn_id = fc["player"].get("espnId") if fc else None
+    if not espn_id:
+        espn_id = leaguelogs_client.get_espn_id(player_id)
 
     return {
         "player_id": player_id,
@@ -138,6 +142,21 @@ def get_injury_notes(espn_athlete_id: str, team: str) -> dict:
     }
 
 
+def get_status_blurb(player_id: str) -> dict:
+    """
+    Fetch a short LLM-written status note from LeagueLogs (free, no auth),
+    covering recent injury/transaction/depth-chart signals. Keyed directly by
+    Sleeper player_id — no ESPN id needed, so always safe to call even when
+    espn_id is null. Sometimes surfaces basic production context (e.g. recent
+    stat lines) that ESPN lookups miss entirely for a player with no espn_id.
+    player_id: Sleeper player_id (same id used everywhere else, NOT espn_athlete_id)
+    """
+    blurb = leaguelogs_client.get_player_blurb(player_id)
+    if blurb is None:
+        return {"error": "no recent status material available for this player"}
+    return blurb
+
+
 def compute_age_curve_signal(position: str, age: int | None, years_exp: int | None) -> dict:
     """
     Estimate dynasty career-window remaining from position-specific aging curves.
@@ -207,6 +226,9 @@ Tools available:
 - get_prior_season_production: The season before that, for trend comparison
 - get_career_production: Career totals for broader context
 - get_injury_notes: Recent injury/status notes from ESPN's team feed
+- get_status_blurb: Short LeagueLogs status note (injury/transaction/depth-chart context) —
+  keyed by player_id directly, works even when no ESPN id exists, and sometimes surfaces
+  basic stat lines ESPN missed entirely for a deep-roster player
 - compute_age_curve_signal: Position-specific aging-window risk from age/years_exp
 
 Steps:
@@ -214,19 +236,23 @@ Steps:
 2. Call get_current_season_production and get_prior_season_production to see the trend
 3. Call get_career_production for broader context
 4. Call get_injury_notes for recent injury/status signal
-5. Call compute_age_curve_signal using the player's position/age/years_exp
-6. Combine injury notes + age-curve signal into the Risk Modifier
-7. Synthesize all into a Production Grade
+5. Call get_status_blurb (use player_id, not espn_id) — always call this one, it works
+   regardless of whether an ESPN id exists, and cross-check anything it mentions against
+   the ESPN stats you already pulled
+6. Call compute_age_curve_signal using the player's position/age/years_exp
+7. Combine injury notes + status blurb + age-curve signal into the Risk Modifier
+8. Synthesize all into a Production Grade
 
-CRITICAL — lookup_player_info's espn_id can be null for a player too deep on the roster
-to have an ESPN athlete id on file (neither Sleeper nor FantasyCalc tracks one). When
-that happens, get_current_season_production/get_prior_season_production/get_career_production/
-get_injury_notes will each return {{"error": "no ESPN athlete id..."}} instead of stats —
-still call them if you want, they're safe to call, but do NOT retry with a made-up id or
-treat the null as a value to pass elsewhere. This is a legitimate case (a deep-bench/
-practice-squad-caliber player), not a failure: grade production low (D/F range, no
-production evidence) and note explicitly in key_concerns that no NFL production data
-exists for them, rather than guessing at stats.
+CRITICAL — lookup_player_info's espn_id can be null for a player too deep on the roster to
+have an ESPN athlete id on file (neither Sleeper, FantasyCalc, nor LeagueLogs tracks one).
+When that happens, get_current_season_production/get_prior_season_production/
+get_career_production/get_injury_notes will each return {{"error": "no ESPN athlete id..."}}
+instead of stats — still call them if you want, they're safe to call, but do NOT retry with
+a made-up id or treat the null as a value to pass elsewhere. get_status_blurb doesn't need
+an espn_id at all, so it's your best source of any production signal in this situation —
+if it surfaces even a partial stat line (e.g. "9 rushing attempts for 60 yards"), use that
+rather than grading purely on "no data." Only fall back to a pure no-evidence F grade if
+get_status_blurb also comes back empty/errored.
 
 Key stats to weight for skill positions (field names come from ESPN's flattened stats):
 - RB: rushingYards, rushingAttempts, yardsPerRushAttempt, rushingTouchdowns, receptions, receivingYards
@@ -276,6 +302,7 @@ def build_production_agent() -> LlmAgent:
             get_prior_season_production,
             get_career_production,
             get_injury_notes,
+            get_status_blurb,
             compute_age_curve_signal,
         ],
     )

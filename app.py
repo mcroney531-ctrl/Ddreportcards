@@ -32,7 +32,7 @@ def _init_secrets():
 
 _init_secrets()
 
-from data import sleeper_client
+from data import sleeper_client, leaguelogs_client
 from agents.synthesis_agent import run_synthesis_agent
 from agents.roster_agent import run_roster_agent
 from agents.trade_agent import run_trade_agent
@@ -99,6 +99,8 @@ with st.sidebar:
     st.divider()
     st.caption(f"{len(players)} skill-position players on roster")
     st.caption(f"{len(st.session_state.player_cards)} report card(s) generated")
+    st.divider()
+    st.markdown(leaguelogs_client.ATTRIBUTION_HTML, unsafe_allow_html=True)
 
 
 def _run_all_report_cards():
