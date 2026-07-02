@@ -35,15 +35,21 @@ def team_espn_id(sleeper_team_abbr: str) -> str | None:
 
 
 def get_season_statistics(espn_athlete_id: str, season: int) -> dict:
+    """Returns {} if the athlete has no stats for that season (e.g. hasn't played yet)."""
     url = f"{BASE_URL}/seasons/{season}/types/2/athletes/{espn_athlete_id}/statistics"
     resp = httpx.get(url, timeout=15)
+    if resp.status_code == 404:
+        return {}
     resp.raise_for_status()
     return resp.json()
 
 
 def get_career_statistics(espn_athlete_id: str) -> dict:
+    """Returns {} if the athlete has no career stats on file yet."""
     url = f"{BASE_URL}/athletes/{espn_athlete_id}/statistics"
     resp = httpx.get(url, timeout=15)
+    if resp.status_code == 404:
+        return {}
     resp.raise_for_status()
     return resp.json()
 

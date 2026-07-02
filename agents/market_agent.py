@@ -45,8 +45,8 @@ MAX_BLEND_ADJUSTMENT = 0.25
 
 def get_market_consensus(player_id: str) -> dict:
     """
-    FantasyCalc dynasty value consensus for a player: dynasty value, position
-    rank, overall rank, 30-day trend, and redraft value for context.
+    FantasyCalc dynasty value consensus for a player: name, dynasty value,
+    position rank, overall rank, 30-day trend, and redraft value for context.
     player_id: Sleeper player_id
     """
     fc = fantasycalc_client.get_value_for_sleeper_id(player_id)
@@ -58,6 +58,7 @@ def get_market_consensus(player_id: str) -> dict:
         }
     return {
         "in_pool": True,
+        "name": fc["player"]["name"],
         "dynasty_value": fc["value"],
         "position": fc["player"]["position"],
         "position_rank": fc["positionRank"],
@@ -174,9 +175,14 @@ deliberately excluded, no public API).
 {MARKET_CALIBRATION}
 
 Tools available:
-- get_market_consensus: FantasyCalc dynasty value, position/overall rank, 30-day trend
+- get_market_consensus: player name, FantasyCalc dynasty value, position/overall rank, 30-day trend
 - compute_proprietary_composite: Our own 0-100 composite from Opportunity/Production/Risk
 - blend_with_market: Blends the composite with FantasyCalc's value into one hybrid market value
+
+CRITICAL — the "name" field returned by get_market_consensus is the ONLY source of truth
+for the player's identity. Always use it verbatim for the "player" field in your output.
+Never guess or recall a name from your own knowledge of the player_id — player_ids are
+Sleeper's internal identifiers and are not something you can reliably infer a name from.
 
 Steps:
 1. Call get_market_consensus for the player's FantasyCalc standing

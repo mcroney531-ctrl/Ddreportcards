@@ -22,7 +22,7 @@ from google.adk.runners import Runner
 from google.adk.sessions import InMemorySessionService
 from google.genai import types as genai_types
 
-from data import sleeper_client, espn_client
+from data import sleeper_client, espn_client, fantasycalc_client
 
 # ── Age-curve calibration (position-specific dynasty decline windows) ─────────
 
@@ -53,6 +53,14 @@ def lookup_player_info(player_id: str) -> dict:
     p = all_players.get(player_id)
     if not p:
         return {"error": f"No Sleeper player found for player_id={player_id!r}"}
+
+    # Sleeper's espn_id is null for some recent rookies — FantasyCalc carries
+    # the same id as a reliable fallback since it's matched by sleeperId.
+    espn_id = p.get("espn_id")
+    if not espn_id:
+        fc = fantasycalc_client.get_value_for_sleeper_id(player_id)
+        espn_id = fc["player"].get("espnId") if fc else None
+
     return {
         "player_id": player_id,
         "full_name": p.get("full_name"),
@@ -64,7 +72,7 @@ def lookup_player_info(player_id: str) -> dict:
         "injury_status": p.get("injury_status"),
         "injury_start_date": p.get("injury_start_date"),
         "practice_participation": p.get("practice_participation"),
-        "espn_id": p.get("espn_id"),
+        "espn_id": espn_id,
     }
 
 
