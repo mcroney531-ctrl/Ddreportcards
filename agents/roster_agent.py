@@ -51,10 +51,13 @@ def _letter_grade(score: float) -> str:
 
 
 def _quality_score(card: dict) -> float:
+    # `or 0` (not just .get(key, 0)) because a sub-agent can return an explicit
+    # null for a score field, not just omit the key — .get's default only
+    # covers the latter.
     return (
-        card.get("opportunity_score", 0) * QUALITY_WEIGHTS["opportunity"]
-        + card.get("production_score", 0) * QUALITY_WEIGHTS["production"]
-        + card.get("trade_value_score", 0) * QUALITY_WEIGHTS["trade_value"]
+        (card.get("opportunity_score") or 0) * QUALITY_WEIGHTS["opportunity"]
+        + (card.get("production_score") or 0) * QUALITY_WEIGHTS["production"]
+        + (card.get("trade_value_score") or 0) * QUALITY_WEIGHTS["trade_value"]
     )
 
 
