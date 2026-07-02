@@ -3,7 +3,7 @@ Dynasty Report Cards — Streamlit frontend.
 Roster overview -> player card view -> trade section.
 """
 
-import os, sys, asyncio, json
+import os, sys, asyncio, json, re
 sys.path.insert(0, os.path.dirname(__file__))
 
 from dotenv import load_dotenv
@@ -56,6 +56,92 @@ def grade_pill(grade: str) -> str:
         f'font-weight:800;font-size:0.9rem;background:{c}22;color:{c};border:1px solid {c}66;">'
         f'{grade or "—"}</span>'
     )
+
+
+def _format_stat_dict(stats: dict) -> str:
+    """Turn a {camelCase_or_snake_case: value} dict into a clean markdown bullet list."""
+    lines = []
+    for key, value in stats.items():
+        if value is None:
+            continue
+        label = re.sub(r"(?<!^)(?=[A-Z])", " ", key).replace("_", " ").title()
+        lines.append(f"- **{label}:** {value}")
+    return "\n".join(lines) if lines else "_No stats on file._"
+
+
+def render_score_detail(kind: str, detail: dict | None):
+    """Render the raw sub-agent breakdown behind one of the three scores."""
+    if not detail:
+        st.caption("No detail available for this score.")
+        return
+    if "error" in detail or "raw_output" in detail:
+        st.caption(f"Detail unavailable: {detail.get('error') or 'unstructured agent output'}")
+        return
+
+    if kind == "situation":
+        st.markdown(f"**Depth chart order:** {detail.get('depth_chart_order', '—')}")
+        comp = detail.get("competition") or {}
+        if comp:
+            st.markdown(f"**Competition:** {comp.get('room_strength', '—')}")
+            if comp.get("summary"):
+                st.caption(comp["summary"])
+        st.divider()
+        for f in detail.get("key_factors", []):
+            st.markdown(f"✅ {f}")
+        for c in detail.get("concerns", []):
+            st.markdown(f"⚠️ {c}")
+        if detail.get("summary"):
+            st.divider()
+            st.caption(detail["summary"])
+
+    elif kind == "production":
+        stats = detail.get("key_stats") or {}
+        st.markdown(f"**{detail.get('current_season', 'Season')} stats:**")
+        st.markdown(_format_stat_dict(stats))
+        if detail.get("trend_note"):
+            st.caption(detail["trend_note"])
+        st.divider()
+        for f in detail.get("key_factors", []):
+            st.markdown(f"✅ {f}")
+        for c in detail.get("concerns", []):
+            st.markdown(f"⚠️ {c}")
+
+    elif kind == "market":
+        st.markdown(
+            f"**Dynasty value:** {detail.get('dynasty_value', '—')} &nbsp;·&nbsp; "
+            f"**Market percentile:** {detail.get('market_percentile', '—')}",
+            unsafe_allow_html=True,
+        )
+        if detail.get("trend_note"):
+            st.caption(detail["trend_note"])
+        st.divider()
+        for f in detail.get("key_factors", []):
+            st.markdown(f"✅ {f}")
+
+
+def render_score_circle(label: str, score, grade: str, kind: str, detail: dict | None):
+    """Colored circle for one of the three scores, with a clickable ⓘ popover
+    showing the raw sub-agent breakdown behind it."""
+    color = grade_color(grade)
+    score_display = score if score is not None else "—"
+    circ_col, icon_col = st.columns([4, 1])
+    with circ_col:
+        st.markdown(
+            f'''<div style="text-align:center;">
+              <div style="width:64px;height:64px;border-radius:50%;background:{color}22;
+                border:3px solid {color};display:flex;align-items:center;justify-content:center;
+                font-weight:800;font-size:1.35rem;color:{color};margin:0 auto 0.3rem auto;">{score_display}</div>
+              <div style="font-size:0.8rem;color:#9aa6bb;font-weight:600;">{label}</div>
+              <div style="font-size:0.78rem;font-weight:700;color:{color};">{grade or "—"}</div>
+            </div>''',
+            unsafe_allow_html=True,
+        )
+    with icon_col:
+        st.write("")
+        st.write("")
+        with st.popover("ⓘ", use_container_width=True):
+            st.markdown(f"**What's behind the {label} score**")
+            render_score_detail(kind, detail)
 
 
 # ── Session state ──────────────────────────────────────────────────────────────
@@ -270,18 +356,14 @@ elif st.session_state.view == "player":
             st.rerun()
         st.stop()
 
-    st.markdown(
-        f"Opportunity {grade_pill(card.get('opportunity_grade'))} &nbsp;&nbsp; "
-        f"Production {grade_pill(card.get('production_grade'))} &nbsp;&nbsp; "
-        f"Trade Value {grade_pill(card.get('trade_value_grade'))}",
-        unsafe_allow_html=True,
-    )
-    st.write("")
-
+    detail = card.get("_detail") or {}
     c1, c2, c3 = st.columns(3)
-    c1.metric("Opportunity Score", card.get("opportunity_score", "—"))
-    c2.metric("Production Score", card.get("production_score", "—"))
-    c3.metric("Trade Value Score", card.get("trade_value_score", "—"))
+    with c1:
+        render_score_circle("Opportunity", card.get("opportunity_score"), card.get("opportunity_grade"), "situation", detail.get("situation"))
+    with c2:
+        render_score_circle("Production", card.get("production_score"), card.get("production_grade"), "production", detail.get("production"))
+    with c3:
+        render_score_circle("Trade Value", card.get("trade_value_score"), card.get("trade_value_grade"), "market", detail.get("market"))
 
     st.divider()
 

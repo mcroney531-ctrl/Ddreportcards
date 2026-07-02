@@ -34,42 +34,56 @@ def _run_in_thread(coro):
 
 
 # ── ADK tool functions ────────────────────────────────────────────────────────
+#
+# Each factory closes over a shared `sub_results` dict so the caller can see
+# the full, unmediated sub-agent outputs (competition breakdown, key stats,
+# market percentile, etc.) after the run — not just whatever the LLM chose to
+# echo into its final narrative. This backs the UI's "what's behind this
+# score" drill-down without relying on the LLM to faithfully copy large JSON
+# blobs verbatim.
 
-def evaluate_situation(player_id: str) -> dict:
-    """
-    Call the Situation Agent to evaluate opportunity for a rostered player.
-    Returns opportunity_score (0-100), opportunity_grade (letter), team,
-    depth_chart_order, competition breakdown, key_factors, concerns, summary.
-    player_id: Sleeper player_id
-    """
-    return _run_in_thread(run_situation_agent(player_id))
+def _make_tools(sub_results: dict):
+    def evaluate_situation(player_id: str) -> dict:
+        """
+        Call the Situation Agent to evaluate opportunity for a rostered player.
+        Returns opportunity_score (0-100), opportunity_grade (letter), team,
+        depth_chart_order, competition breakdown, key_factors, concerns, summary.
+        player_id: Sleeper player_id
+        """
+        result = _run_in_thread(run_situation_agent(player_id))
+        sub_results["situation"] = result
+        return result
 
+    def evaluate_production(player_id: str) -> dict:
+        """
+        Call the Production Agent to evaluate on-field production and compute the
+        Risk Modifier for a rostered player. Returns production_score (0-100),
+        production_grade, key_stats, risk_modifier (durability_score 1-5,
+        injury_chance_pct, aging_risk), key_factors, concerns, summary.
+        player_id: Sleeper player_id
+        """
+        result = _run_in_thread(run_production_agent(player_id))
+        sub_results["production"] = result
+        return result
 
-def evaluate_production(player_id: str) -> dict:
-    """
-    Call the Production Agent to evaluate on-field production and compute the
-    Risk Modifier for a rostered player. Returns production_score (0-100),
-    production_grade, key_stats, risk_modifier (durability_score 1-5,
-    injury_chance_pct, aging_risk), key_factors, concerns, summary.
-    player_id: Sleeper player_id
-    """
-    return _run_in_thread(run_production_agent(player_id))
+    def evaluate_market(
+        player_id: str, opportunity_score: int, production_score: int, durability_score: int, aging_risk: str
+    ) -> dict:
+        """
+        Call the Market Agent to compute the player's dynasty Trade Value — a hybrid
+        of our own proprietary composite (built from the opportunity/production/risk
+        scores you pass in) and FantasyCalc's dynasty value consensus.
+        player_id: Sleeper player_id
+        opportunity_score, production_score: from evaluate_situation/evaluate_production
+        durability_score, aging_risk: from evaluate_production's risk_modifier
+        """
+        result = _run_in_thread(
+            run_market_agent(player_id, opportunity_score, production_score, durability_score, aging_risk)
+        )
+        sub_results["market"] = result
+        return result
 
-
-def evaluate_market(
-    player_id: str, opportunity_score: int, production_score: int, durability_score: int, aging_risk: str
-) -> dict:
-    """
-    Call the Market Agent to compute the player's dynasty Trade Value — a hybrid
-    of our own proprietary composite (built from the opportunity/production/risk
-    scores you pass in) and FantasyCalc's dynasty value consensus.
-    player_id: Sleeper player_id
-    opportunity_score, production_score: from evaluate_situation/evaluate_production
-    durability_score, aging_risk: from evaluate_production's risk_modifier
-    """
-    return _run_in_thread(
-        run_market_agent(player_id, opportunity_score, production_score, durability_score, aging_risk)
-    )
+    return [evaluate_situation, evaluate_production, evaluate_market]
 
 
 # ── System prompt ───────────────────────────────────────────────────────────
@@ -118,18 +132,25 @@ Output format — return a JSON object with these exact keys:
 
 # ── Agent + runner ────────────────────────────────────────────────────────────
 
-def build_synthesis_agent() -> LlmAgent:
+def build_synthesis_agent(sub_results: dict) -> LlmAgent:
     return LlmAgent(
         model=LiteLlm(model="anthropic/claude-sonnet-4-6", api_key=os.getenv("ANTHROPIC_API_KEY")),
         name="synthesis_agent",
         instruction=SYSTEM_PROMPT,
-        tools=[evaluate_situation, evaluate_production, evaluate_market],
+        tools=_make_tools(sub_results),
     )
 
 
 async def run_synthesis_agent(player_id: str) -> dict:
-    """Run the full player-card pipeline for a given Sleeper player_id."""
-    agent = build_synthesis_agent()
+    """
+    Run the full player-card pipeline for a given Sleeper player_id.
+
+    The returned card carries a "_detail" key with the raw situation/
+    production/market sub-agent outputs, for UI drill-down into what backs
+    each score — not part of the LLM-authored schema, attached in code.
+    """
+    sub_results: dict = {}
+    agent = build_synthesis_agent(sub_results)
     session_service = InMemorySessionService()
     runner = Runner(agent=agent, app_name="dynasty_report_cards", session_service=session_service)
 
@@ -154,7 +175,9 @@ async def run_synthesis_agent(player_id: str) -> dict:
 
     json_match = re.search(r'\{.*\}', result_text, re.DOTALL)
     if json_match:
-        return json.loads(json_match.group())
+        card = json.loads(json_match.group())
+        card["_detail"] = sub_results
+        return card
     return {"raw_output": result_text}
 
 
