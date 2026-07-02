@@ -35,20 +35,21 @@ def team_espn_id(sleeper_team_abbr: str) -> str | None:
 
 
 def get_season_statistics(espn_athlete_id: str, season: int) -> dict:
-    """Returns {} if the athlete has no stats for that season (e.g. hasn't played yet)."""
+    """Returns {} if the athlete has no stats for that season (e.g. hasn't played yet)
+    or the id is missing/malformed (ESPN 400s on a bad id rather than 404ing)."""
     url = f"{BASE_URL}/seasons/{season}/types/2/athletes/{espn_athlete_id}/statistics"
     resp = httpx.get(url, timeout=15)
-    if resp.status_code == 404:
+    if resp.status_code in (400, 404):
         return {}
     resp.raise_for_status()
     return resp.json()
 
 
 def get_career_statistics(espn_athlete_id: str) -> dict:
-    """Returns {} if the athlete has no career stats on file yet."""
+    """Returns {} if the athlete has no career stats on file yet, or the id is missing/malformed."""
     url = f"{BASE_URL}/athletes/{espn_athlete_id}/statistics"
     resp = httpx.get(url, timeout=15)
-    if resp.status_code == 404:
+    if resp.status_code in (400, 404):
         return {}
     resp.raise_for_status()
     return resp.json()

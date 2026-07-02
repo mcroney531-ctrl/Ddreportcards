@@ -76,6 +76,17 @@ def lookup_player_info(player_id: str) -> dict:
     }
 
 
+def _valid_espn_id(espn_athlete_id) -> bool:
+    """
+    Guards against the LLM passing through a missing id as the literal string
+    "null"/"none" (seen when lookup_player_info's espn_id comes back None for
+    a player too deep on the roster for both Sleeper and FantasyCalc to have
+    an ESPN id on file) — without this, that string reaches ESPN's API as a
+    URL segment and comes back a 400, not a clean "no data" case.
+    """
+    return bool(espn_athlete_id) and str(espn_athlete_id).lower() not in ("null", "none")
+
+
 def get_current_season_production(espn_athlete_id: str, season: int | None = None) -> dict:
     """
     Fetch one NFL regular season's production stats from ESPN (rushing/receiving/
@@ -83,6 +94,8 @@ def get_current_season_production(espn_athlete_id: str, season: int | None = Non
     most recently completed NFL season.
     espn_athlete_id: the player's ESPN athlete id
     """
+    if not _valid_espn_id(espn_athlete_id):
+        return {"error": "no ESPN athlete id on file for this player — likely too deep on the roster to have NFL stats tracked"}
     season = season or _most_recent_completed_season()
     stats = espn_client.get_season_statistics(str(espn_athlete_id), season)
     return {"espn_id": espn_athlete_id, "season": season, "stats": espn_client.flatten_statistics(stats)}
@@ -90,6 +103,8 @@ def get_current_season_production(espn_athlete_id: str, season: int | None = Non
 
 def get_prior_season_production(espn_athlete_id: str) -> dict:
     """Fetch the season before the most recently completed one, for trend comparison."""
+    if not _valid_espn_id(espn_athlete_id):
+        return {"error": "no ESPN athlete id on file for this player — likely too deep on the roster to have NFL stats tracked"}
     season = _most_recent_completed_season() - 1
     stats = espn_client.get_season_statistics(str(espn_athlete_id), season)
     return {"espn_id": espn_athlete_id, "season": season, "stats": espn_client.flatten_statistics(stats)}
@@ -97,6 +112,8 @@ def get_prior_season_production(espn_athlete_id: str) -> dict:
 
 def get_career_production(espn_athlete_id: str) -> dict:
     """Fetch career totals (all NFL seasons combined) from ESPN."""
+    if not _valid_espn_id(espn_athlete_id):
+        return {"error": "no ESPN athlete id on file for this player — likely too deep on the roster to have NFL stats tracked"}
     stats = espn_client.get_career_statistics(str(espn_athlete_id))
     return {"espn_id": espn_athlete_id, "stats": espn_client.flatten_statistics(stats)}
 
@@ -106,6 +123,8 @@ def get_injury_notes(espn_athlete_id: str, team: str) -> dict:
     Fetch recent injury/status notes for the player from ESPN's team injury feed.
     team: NFL team abbreviation, Sleeper convention (e.g. 'TEN', 'WAS')
     """
+    if not _valid_espn_id(espn_athlete_id):
+        return {"error": "no ESPN athlete id on file for this player"}
     team_id = espn_client.team_espn_id(team)
     if not team_id:
         return {"error": f"Unknown team abbreviation {team!r}"}
@@ -198,6 +217,16 @@ Steps:
 5. Call compute_age_curve_signal using the player's position/age/years_exp
 6. Combine injury notes + age-curve signal into the Risk Modifier
 7. Synthesize all into a Production Grade
+
+CRITICAL — lookup_player_info's espn_id can be null for a player too deep on the roster
+to have an ESPN athlete id on file (neither Sleeper nor FantasyCalc tracks one). When
+that happens, get_current_season_production/get_prior_season_production/get_career_production/
+get_injury_notes will each return {{"error": "no ESPN athlete id..."}} instead of stats —
+still call them if you want, they're safe to call, but do NOT retry with a made-up id or
+treat the null as a value to pass elsewhere. This is a legitimate case (a deep-bench/
+practice-squad-caliber player), not a failure: grade production low (D/F range, no
+production evidence) and note explicitly in key_concerns that no NFL production data
+exists for them, rather than guessing at stats.
 
 Key stats to weight for skill positions (field names come from ESPN's flattened stats):
 - RB: rushingYards, rushingAttempts, yardsPerRushAttempt, rushingTouchdowns, receptions, receivingYards
