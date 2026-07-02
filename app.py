@@ -120,40 +120,82 @@ def _run_all_report_cards():
 
 # ── Roster overview ────────────────────────────────────────────────────────────
 
+BANNER_STYLE = (
+    "background:linear-gradient(135deg, #1b2744 0%, #2c3b66 100%);"
+    "border-radius:14px;padding:1.75rem 2rem;margin-bottom:1rem;"
+    "border:1px solid rgba(255,255,255,0.08);"
+)
+
+
+def render_team_report_banner(roster_grade: dict | None, generated: int, total: int):
+    """One cohesive banner that morphs from a call-to-action into the graded
+    team summary, so the whole flow reads as one 'team report card' experience
+    rather than a bare button plus a pile of individual player cards."""
+    if roster_grade:
+        grade = roster_grade.get("overall_grade", "—")
+        c = grade_color(grade)
+        st.markdown(
+            f'''<div style="{BANNER_STYLE}">
+              <div style="display:flex;align-items:center;gap:0.9rem;flex-wrap:wrap;margin-bottom:0.6rem;">
+                <span style="font-size:1.5rem;font-weight:800;color:#fff;">Team Report Card</span>
+                <span style="display:inline-block;padding:0.2rem 0.85rem;border-radius:999px;font-weight:800;
+                  font-size:1.15rem;background:{c}22;color:{c};border:1px solid {c}66;">{grade}</span>
+              </div>
+              <div style="display:flex;gap:1.75rem;flex-wrap:wrap;margin-bottom:0.85rem;">
+                <div><div style="font-size:0.72rem;color:#9aa6bb;text-transform:uppercase;letter-spacing:.05em;">Starter Quality</div>
+                  <div style="font-size:1.1rem;font-weight:700;color:#fff;">{roster_grade.get("starter_quality_score", "—")}</div></div>
+                <div><div style="font-size:0.72rem;color:#9aa6bb;text-transform:uppercase;letter-spacing:.05em;">Strongest</div>
+                  <div style="font-size:1.1rem;font-weight:700;color:#fff;">{roster_grade.get("strongest_position", "—")}</div></div>
+                <div><div style="font-size:0.72rem;color:#9aa6bb;text-transform:uppercase;letter-spacing:.05em;">Weakest</div>
+                  <div style="font-size:1.1rem;font-weight:700;color:#fff;">{roster_grade.get("weakest_position", "—")}</div></div>
+              </div>
+              <div style="font-size:0.92rem;color:#dbe1f0;line-height:1.55;">{roster_grade.get("narrative", "")}</div>
+            </div>''',
+            unsafe_allow_html=True,
+        )
+        for flag in roster_grade.get("flags", []):
+            st.warning(flag)
+        st.caption("Player insights below — click a player for their full breakdown.")
+        return
+
+    subtext = (
+        "Get an overall roster grade plus every player's opportunity, production, and "
+        "trade-value evals — all in one pass."
+        if generated == 0
+        else f"{generated} of {total} player report cards generated so far — pick up where you left off."
+    )
+    st.markdown(
+        f'''<div style="{BANNER_STYLE}">
+          <div style="font-size:1.4rem;font-weight:800;color:#fff;margin-bottom:0.4rem;">
+            📋 Generate Your Team Report Card</div>
+          <div style="font-size:0.95rem;color:#c3cbe0;">{subtext}</div>
+        </div>''',
+        unsafe_allow_html=True,
+    )
+    btn_label = "🔄 Continue Generating" if generated > 0 else "🔄 Generate Team Report Card"
+    if st.button(btn_label, type="primary", use_container_width=True):
+        _run_all_report_cards()
+        st.rerun()
+
+
 if st.session_state.view == "overview":
     cards_ready = len(players) > 0 and len(st.session_state.player_cards) == len(players)
-
-    top_l, top_r = st.columns([4, 1])
-    with top_l:
-        st.subheader("Roster Overview")
-    with top_r:
-        if st.button("🔄 Generate Report Cards", use_container_width=True, disabled=cards_ready):
-            _run_all_report_cards()
-            st.rerun()
 
     if cards_ready and st.session_state.roster_grade is None:
         with st.spinner("Computing overall roster grade..."):
             valid_cards = [c for c in st.session_state.player_cards.values() if "error" not in c]
             st.session_state.roster_grade = asyncio.run(run_roster_agent(valid_cards))
 
-    if st.session_state.roster_grade:
-        rg = st.session_state.roster_grade
-        c1, c2, c3 = st.columns(3)
-        with c1:
-            st.markdown(f"### Overall Grade {grade_pill(rg.get('overall_grade'))}", unsafe_allow_html=True)
-        c2.metric("Starter Quality Score", rg.get("starter_quality_score", "—"))
-        c3.metric("Strongest / Weakest", f"{rg.get('strongest_position', '—')} / {rg.get('weakest_position', '—')}")
-        for flag in rg.get("flags", []):
-            st.warning(flag)
-        if rg.get("narrative"):
-            st.markdown(rg["narrative"])
-        st.divider()
+    render_team_report_banner(st.session_state.roster_grade, len(st.session_state.player_cards), len(players))
 
-    st.caption("Click a player to view their full report card.")
+    st.divider()
 
     by_position: dict[str, list] = {}
     for p in players:
         by_position.setdefault(p.get("position"), []).append(p)
+
+    if st.session_state.player_cards:
+        st.markdown("### Player Insights")
 
     for pos in ("QB", "RB", "WR", "TE"):
         pos_players = by_position.get(pos, [])
