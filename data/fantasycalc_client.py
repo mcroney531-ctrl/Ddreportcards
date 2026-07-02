@@ -42,3 +42,23 @@ def index_by_sleeper_id(values: list[dict]) -> dict[str, dict]:
 def get_value_for_sleeper_id(sleeper_id: str) -> dict | None:
     values = get_dynasty_values()
     return index_by_sleeper_id(values).get(sleeper_id)
+
+
+def index_by_sleeper_id_with_redraft_rank(values: list[dict]) -> dict[str, dict]:
+    """Like index_by_sleeper_id, but each entry also gets 'redraftPositionRank'.
+
+    FantasyCalc's API gives a dynasty positionRank directly but no redraft
+    equivalent, so it's derived here by sorting each position group by
+    redraftValue. Redraft rank reflects who is actually eating snaps *now*,
+    which is the relevant signal for grading current on-field competition.
+    """
+    by_sleeper = index_by_sleeper_id(values)
+    by_position: dict[str, list[str]] = {}
+    for sid, entry in by_sleeper.items():
+        pos = entry["player"].get("position")
+        by_position.setdefault(pos, []).append(sid)
+    for sids in by_position.values():
+        sids.sort(key=lambda s: by_sleeper[s].get("redraftValue") or 0, reverse=True)
+        for i, sid in enumerate(sids):
+            by_sleeper[sid]["redraftPositionRank"] = i + 1
+    return by_sleeper
