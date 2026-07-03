@@ -28,6 +28,66 @@ def get_league_rosters(league_id: str) -> list[dict]:
     return resp.json()
 
 
+def get_league_info(league_id: str) -> dict:
+    resp = httpx.get(f"{BASE_URL}/league/{league_id}", timeout=15)
+    resp.raise_for_status()
+    return resp.json()
+
+
+def get_league_season_chain(league_id: str) -> list[dict]:
+    """
+    Walk previous_league_id links to find every season this dynasty league has
+    existed under. Returns [{"league_id": ..., "season": "2026"}, ...] newest
+    first. Each season is technically a separate Sleeper league object linked
+    by previous_league_id — normal for how Sleeper models dynasty continuity.
+    """
+    chain = []
+    current_id = league_id
+    seen = set()
+    while current_id and current_id not in seen:
+        seen.add(current_id)
+        info = get_league_info(current_id)
+        chain.append({"league_id": current_id, "season": info.get("season")})
+        current_id = info.get("previous_league_id")
+    return chain
+
+
+def get_transactions(league_id: str, week: int) -> list[dict]:
+    resp = httpx.get(f"{BASE_URL}/league/{league_id}/transactions/{week}", timeout=15)
+    resp.raise_for_status()
+    return resp.json()
+
+
+def get_all_trades(league_id: str) -> list[dict]:
+    """
+    All completed trades for one season's league_id, deduped by transaction_id.
+    Trades made in the offseason (before Week 1 games are played) are logged
+    under week 1, but this scans the full 1-18 range to also catch in-season
+    trades.
+    """
+    trades: dict[str, dict] = {}
+    for week in range(1, 19):
+        for txn in get_transactions(league_id, week):
+            if txn.get("type") == "trade" and txn.get("status") == "complete":
+                trades[txn["transaction_id"]] = txn
+    return list(trades.values())
+
+
+def get_all_trades_all_seasons(league_id: str) -> list[dict]:
+    """
+    Every completed trade across this dynasty league's full history (every
+    season in the previous_league_id chain), each tagged with its season year.
+    """
+    all_trades = []
+    for season_info in get_league_season_chain(league_id):
+        for trade in get_all_trades(season_info["league_id"]):
+            trade["_season"] = season_info["season"]
+            trade["_league_id"] = season_info["league_id"]
+            all_trades.append(trade)
+    all_trades.sort(key=lambda t: t.get("created") or 0, reverse=True)
+    return all_trades
+
+
 def get_all_players() -> dict[str, dict]:
     """Full Sleeper player dictionary keyed by player_id. ~14MB; cached in-process."""
     global _players_cache, _players_cache_time

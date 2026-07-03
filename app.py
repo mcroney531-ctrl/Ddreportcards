@@ -32,7 +32,7 @@ def _init_secrets():
 
 _init_secrets()
 
-from data import sleeper_client, leaguelogs_client
+from data import sleeper_client, leaguelogs_client, trade_history
 from agents.synthesis_agent import run_synthesis_agent
 from agents.roster_agent import run_roster_agent
 from agents.trade_agent import run_trade_agent
@@ -181,6 +181,9 @@ with st.sidebar:
         st.rerun()
     if st.button("💱 Trade Section", use_container_width=True):
         st.session_state.view = "trade"
+        st.rerun()
+    if st.button("🔀 Trade History", use_container_width=True):
+        st.session_state.view = "trade_history"
         st.rerun()
     st.divider()
     st.caption(f"{len(players)} skill-position players on roster")
@@ -444,3 +447,92 @@ elif st.session_state.view == "trade":
     if st.button("🔄 Re-run analysis"):
         st.session_state.trade_report = None
         st.rerun()
+
+# ── Trade History ──────────────────────────────────────────────────────────────
+
+elif st.session_state.view == "trade_history":
+    st.subheader("🔀 Trade History")
+    st.caption(
+        "Every completed trade across this league's full history, priced against "
+        "FantasyCalc's CURRENT values — not what things were worth at the time of "
+        "the trade (no service exposes historical value snapshots, so this is a "
+        "retroactive approximation). An internal-market signal, not a verdict on "
+        "who 'won' a given trade."
+    )
+
+    @st.cache_data(ttl=1800, show_spinner="Loading full trade history (walks every season back to league creation, can take a minute)...")
+    def _load_trade_history():
+        return trade_history.get_trade_history(LEAGUE_ID)
+
+    all_trades = _load_trade_history()
+    st.caption(f"{len(all_trades)} completed trades found")
+
+    seasons = sorted({t["season"] for t in all_trades if t["season"]}, reverse=True)
+    f1, f2 = st.columns([2, 3])
+    with f1:
+        season_filter = st.multiselect("Season", seasons, default=seasons)
+    with f2:
+        search = st.text_input("Filter by player or team name", placeholder="e.g. Pollard, Squirtle Squad")
+
+    def _trade_matches(trade: dict, query: str) -> bool:
+        q = query.lower()
+        for side in trade["sides"]:
+            if q in side["team"].lower():
+                return True
+            for asset in side["gave"] + side["received"]:
+                label = asset.get("name") or asset.get("label") or ""
+                if q in label.lower():
+                    return True
+        return False
+
+    filtered = [
+        t for t in all_trades
+        if (not season_filter or t["season"] in season_filter)
+        and (not search or _trade_matches(t, search))
+    ]
+    st.caption(f"Showing {min(len(filtered), 100)} of {len(filtered)} matching trades")
+
+    for t in filtered[:100]:
+        with st.container(border=True):
+            st.caption(f"{t['date']} · {t['season']} season")
+            sides = t["sides"]
+
+            if len(sides) != 2:
+                for s in sides:
+                    got = ", ".join((a.get("name") or a.get("label")) for a in s["received"]) or "nothing"
+                    st.markdown(f"**{s['team']}** received: {got}")
+                continue
+
+            side_a, side_b = sides
+            ca, cb = st.columns(2)
+            for col, side in ((ca, side_a), (cb, side_b)):
+                with col:
+                    st.markdown(f"**{side['team']}**")
+                    st.caption(f"Gave up (value {side['gave_value']}):")
+                    for a in side["gave"]:
+                        label = a["name"] if a["type"] == "player" else a["label"]
+                        extra = f" ({a['position']} - {a['team']})" if a["type"] == "player" and a.get("position") else ""
+                        st.markdown(f"- {label}{extra}")
+
+            if side_a["gave_value"] and side_b["gave_value"]:
+                ratio = side_a["received_value"] / side_a["gave_value"]
+                if 0.85 <= ratio <= 1.18:
+                    st.caption(f"⚖️ Balanced by today's values (ratio {ratio:.2f})")
+                elif ratio > 1.18:
+                    st.caption(f"📈 {side_a['team']} came out ahead by today's values (ratio {ratio:.2f})")
+                else:
+                    st.caption(f"📉 {side_b['team']} came out ahead by today's values (ratio {1 / ratio:.2f})")
+
+    st.divider()
+    with st.expander("🔍 Look up a player's trade history"):
+        activity = trade_history.summarize_player_trade_activity(all_trades)
+        name_query = st.text_input("Player name", key="trade_lookup_name")
+        if name_query:
+            matches = [a for a in activity.values() if name_query.lower() in a["name"].lower()]
+            if not matches:
+                st.caption("No trade history found for that name.")
+            for a in matches:
+                st.markdown(f"**{a['name']}** ({a['position']}) — traded {a['times_traded']} time(s)")
+                for occ in a["occurrences"]:
+                    ratio_note = f", side ratio {occ['side_value_ratio']}" if occ["side_value_ratio"] is not None else ""
+                    st.caption(f"- {occ['date']} ({occ['season']}): {occ['traded_from']} → {occ['traded_to']}{ratio_note}")
