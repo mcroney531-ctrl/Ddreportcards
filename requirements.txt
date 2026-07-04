@@ -1,6 +1,7 @@
 google-adk[extensions]
 litellm
-anthropic
-streamlit
+anthropicstreamlit
 httpx
 python-dotenv
+fastapi
+uvicorn[standard]
