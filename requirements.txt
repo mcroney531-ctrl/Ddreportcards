@@ -1,6 +1,7 @@
 google-adk[extensions]
 litellm
-anthropicstreamlit
+anthropic
+streamlit
 httpx
 python-dotenv
 fastapi
