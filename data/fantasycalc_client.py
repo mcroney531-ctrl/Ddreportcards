@@ -15,7 +15,7 @@ _values_cache_time: float = 0.0
 _VALUES_TTL_SECONDS = 6 * 60 * 60
 
 
-def get_dynasty_values(is_dynasty: bool = True, num_qbs: int = 2, num_teams: int = 12, ppr: float = 1) -> list[dict]:
+def get_dynasty_values(is_dynasty: bool = True, num_qbs: int = 2, num_teams: int = 12, ppr: float = 0.5) -> list[dict]:
     """Full league-wide value list. Cached in-process since it's the same call every time for this league."""
     global _values_cache, _values_cache_time
     now = time.time()

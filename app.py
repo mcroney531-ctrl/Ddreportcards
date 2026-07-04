@@ -38,7 +38,7 @@ from agents.roster_agent import run_roster_agent
 from agents.trade_agent import run_trade_agent
 
 LEAGUE_ID = os.getenv("SLEEPER_LEAGUE_ID")
-OWNER = os.getenv("ROSTER_OWNER_ID", "BCNH")
+OWNER = os.getenv("ROSTER_OWNER_ID", "TitansTrev55")
 
 GRADE_COLORS = {"A": "#3fb950", "B": "#3b82f6", "C": "#e8b84b", "D": "#e3873c", "F": "#f85149"}
 
@@ -169,7 +169,7 @@ def load_roster():
 players = load_roster()
 
 st.title("📋 Dynasty Report Cards")
-st.caption(f"Roster report card for **{OWNER}** — 12-team superflex PPR dynasty")
+st.caption(f"Roster report card for **{OWNER}** — 12-team superflex half-PPR dynasty")
 
 # ── Sidebar nav ───────────────────────────────────────────────────────────────
 
