@@ -173,6 +173,39 @@ def player_news(sleeper_id: str) -> dict:
     }
 
 
+@app.get("/teams/{team}/roster")
+def team_roster(team: str) -> dict:
+    """All current skill-position players on an NFL team, sorted by position + depth chart.
+    Use to verify who is actually on a roster — avoids hallucinating cut/traded players."""
+    all_p = get_all_players()
+    fc_values = get_dynasty_values()
+    fc_index = index_by_sleeper_id(fc_values)
+    team_upper = team.upper()
+    players = []
+    for pid, p in all_p.items():
+        if (p.get("team") or "").upper() != team_upper:
+            continue
+        if p.get("position") not in ("QB", "RB", "WR", "TE"):
+            continue
+        fc = fc_index.get(pid, {})
+        players.append({
+            "player_id": pid,
+            "name": p.get("full_name"),
+            "position": p.get("position"),
+            "depth_chart_order": p.get("depth_chart_order"),
+            "status": p.get("status"),
+            "injury_status": p.get("injury_status"),
+            "age": p.get("age"),
+            "years_exp": p.get("years_exp"),
+            "dynasty_value": fc.get("value"),
+            "dynasty_pos_rank": fc.get("positionRank"),
+        })
+    players.sort(key=lambda x: (x["position"], x["depth_chart_order"] or 99))
+    if not players:
+        raise HTTPException(status_code=404, detail=f"No skill-position players found for team {team_upper!r}")
+    return {"team": team_upper, "player_count": len(players), "players": players}
+
+
 @app.get("/roster/{owner}")
 def roster_data(owner: str) -> dict:
     """Full Sleeper roster for a display name with FantasyCalc values attached.
