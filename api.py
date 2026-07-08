@@ -107,6 +107,10 @@ def search_players(q: str = Query(..., min_length=2)) -> dict:
             "team": p.get("team"),
             "age": p.get("age"),
             "years_exp": p.get("years_exp"),
+            "status": p.get("status"),
+            "injury_status": p.get("injury_status"),
+            "depth_chart_order": p.get("depth_chart_order"),
+            "depth_chart_position": p.get("depth_chart_position"),
             "dynasty_value": fc.get("value"),
             "dynasty_pos_rank": fc.get("positionRank"),
             "redraft_value": fc.get("redraftValue"),
@@ -133,10 +137,39 @@ def player_info(sleeper_id: str) -> dict:
         "years_exp": meta.get("years_exp"),
         "status": meta.get("status"),
         "injury_status": meta.get("injury_status"),
+        "depth_chart_order": meta.get("depth_chart_order"),
+        "depth_chart_position": meta.get("depth_chart_position"),
+        "injury_notes": meta.get("injury_notes"),
+        "practice_status": meta.get("practice_status"),
         "dynasty_value": fc["value"] if fc else None,
         "dynasty_pos_rank": fc["positionRank"] if fc else None,
         "redraft_value": fc["redraftValue"] if fc else None,
         "trend_30day": fc["trend30Day"] if fc else None,
+    }
+
+
+@app.get("/players/{sleeper_id}/news")
+def player_news(sleeper_id: str) -> dict:
+    """Current NFL status snapshot from Sleeper: team, depth chart, injury, practice.
+    Use to verify a player's present-day situation when training-data knowledge may be stale."""
+    all_p = get_all_players()
+    meta = all_p.get(sleeper_id)
+    if not meta:
+        raise HTTPException(status_code=404, detail=f"No player with id {sleeper_id!r}")
+    return {
+        "player_id": sleeper_id,
+        "full_name": meta.get("full_name"),
+        "team": meta.get("team"),
+        "position": meta.get("position"),
+        "status": meta.get("status"),
+        "injury_status": meta.get("injury_status"),
+        "injury_body_part": meta.get("injury_body_part"),
+        "injury_notes": meta.get("injury_notes"),
+        "practice_status": meta.get("practice_status"),
+        "practice_description": meta.get("practice_description"),
+        "depth_chart_order": meta.get("depth_chart_order"),
+        "depth_chart_position": meta.get("depth_chart_position"),
+        "news_updated": meta.get("news_updated"),
     }
 
 
