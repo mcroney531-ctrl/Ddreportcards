@@ -13,6 +13,7 @@ Fast endpoints (no LLM, sub-second):
   GET  /players/{sleeper_id}
   GET  /players/{sleeper_id}/blurb
   GET  /roster/{owner}
+  POST /trade/evaluate
 
 Pipeline endpoints (LLM, seconds–minutes):
   POST /report/player/{sleeper_id}   single player full card (synthesis_agent)
@@ -29,6 +30,7 @@ load_dotenv()
 
 from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
+from pydantic import BaseModel
 
 from config.dynasty_config import LEAGUE
 from dynasty_core.sleeper import (
@@ -260,6 +262,81 @@ def roster_data(owner: str) -> dict:
         "league_id": LEAGUE_ID,
         "player_count": len(enriched),
         "players": enriched,
+    }
+
+
+class TradeEvaluateRequest(BaseModel):
+    team_a_sends: list[str]
+    team_b_sends: list[str]
+
+
+def _describe_trade_side(sleeper_ids: list[str], all_players: dict, fc_index: dict) -> dict:
+    players = []
+    total_value = 0
+    unknown_ids = []
+    for pid in sleeper_ids:
+        meta = all_players.get(pid)
+        if not meta:
+            unknown_ids.append(pid)
+            continue
+        fc = fc_index.get(pid)
+        value = fc.get("value") if fc else None
+        total_value += value or 0
+        players.append({
+            "player_id": pid,
+            "name": meta.get("full_name"),
+            "position": meta.get("position"),
+            "dynasty_value": value,
+            "dynasty_pos_rank": fc.get("positionRank") if fc else None,
+            "unvalued": fc is None,
+        })
+    return {"players": players, "total_value": total_value, "unknown_ids": unknown_ids}
+
+
+def _fairness_label(delta_pct: float, winner: str | None) -> str:
+    if winner is None or delta_pct < 5:
+        return "even trade"
+    if delta_pct < 15:
+        return f"slight edge to {winner}"
+    if delta_pct < 30:
+        return f"{winner} wins this trade"
+    return f"lopsided in {winner}'s favor"
+
+
+@app.post("/trade/evaluate")
+def evaluate_trade(body: TradeEvaluateRequest) -> dict:
+    """Deterministic trade math: dynasty value sent by each side (real FantasyCalc
+    numbers, not an estimate), the net value delta, and a fairness read. Use this
+    for any trade-fairness question instead of eyeballing values from memory."""
+    if not body.team_a_sends or not body.team_b_sends:
+        raise HTTPException(status_code=400, detail="Both team_a_sends and team_b_sends must be non-empty")
+
+    all_p = get_all_players()
+    fc_index = index_by_sleeper_id(get_dynasty_values())
+
+    team_a = _describe_trade_side(body.team_a_sends, all_p, fc_index)
+    team_b = _describe_trade_side(body.team_b_sends, all_p, fc_index)
+
+    a_value, b_value = team_a["total_value"], team_b["total_value"]
+    net_to_a = b_value - a_value
+    bigger_side = max(a_value, b_value, 1)
+    delta_pct = round(abs(net_to_a) / bigger_side * 100, 1)
+    winner = "team_a" if net_to_a > 0 else "team_b" if net_to_a < 0 else None
+
+    warnings = []
+    for label, side in (("team_a_sends", team_a), ("team_b_sends", team_b)):
+        for pid in side["unknown_ids"]:
+            warnings.append(f"Unknown sleeper_id {pid!r} in {label} — not a tracked skill-position player")
+
+    return {
+        "team_a_sends": team_a["players"],
+        "team_a_value_sent": a_value,
+        "team_b_sends": team_b["players"],
+        "team_b_value_sent": b_value,
+        "net_value_to_team_a": net_to_a,
+        "value_delta_pct": delta_pct,
+        "fairness": _fairness_label(delta_pct, winner),
+        "warnings": warnings,
     }
 
 
