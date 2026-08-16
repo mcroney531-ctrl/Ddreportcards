@@ -13,6 +13,7 @@ Fast endpoints (no LLM, sub-second):
   GET  /players/{sleeper_id}
   GET  /players/{sleeper_id}/blurb
   GET  /roster/{owner}
+  GET  /league/rosters/summary
   POST /trade/evaluate
 
 Pipeline endpoints (LLM, seconds–minutes):
@@ -35,6 +36,8 @@ from pydantic import BaseModel
 from config.dynasty_config import LEAGUE
 from dynasty_core.sleeper import (
     get_all_players,
+    get_league_users,
+    get_league_rosters,
     get_roster_by_display_name,
     resolve_roster_players,
     get_trending_adds,
@@ -263,6 +266,42 @@ def roster_data(owner: str) -> dict:
         "player_count": len(enriched),
         "players": enriched,
     }
+
+
+@app.get("/league/rosters/summary")
+def league_rosters_summary() -> dict:
+    """Position-group depth and dynasty value for every team in the league, one call.
+    Use to find trade partners: a team thin (low count/value) at a position you're
+    deep in is a target; a team overloaded at a position you need may be sellers there."""
+    users = get_league_users(LEAGUE_ID)
+    rosters = get_league_rosters(LEAGUE_ID)
+    all_p = get_all_players()
+    fc_index = index_by_sleeper_id(get_dynasty_values())
+    owner_by_user_id = {u["user_id"]: u.get("display_name") for u in users}
+
+    teams = []
+    for roster in rosters:
+        owner = owner_by_user_id.get(roster.get("owner_id"), "Unknown")
+        pos_values: dict[str, list[int]] = {"QB": [], "RB": [], "WR": [], "TE": []}
+        for pid in roster.get("players") or []:
+            meta = all_p.get(pid)
+            if not meta or meta.get("position") not in pos_values:
+                continue
+            fc = fc_index.get(pid)
+            pos_values[meta["position"]].append((fc.get("value") if fc else 0) or 0)
+
+        positions = {
+            pos: {"count": len(values), "total_value": sum(values), "top_value": max(values, default=0)}
+            for pos, values in pos_values.items()
+        }
+        teams.append({
+            "owner": owner,
+            "total_dynasty_value": sum(p["total_value"] for p in positions.values()),
+            "positions": positions,
+        })
+
+    teams.sort(key=lambda t: t["total_dynasty_value"], reverse=True)
+    return {"teams": teams}
 
 
 class TradeEvaluateRequest(BaseModel):
