@@ -11,6 +11,7 @@ Fast endpoints (no LLM, sub-second):
   GET  /players/trending
   GET  /players/search?q=<name>
   GET  /players/{sleeper_id}
+  GET  /players/{sleeper_id}/blurb
   GET  /roster/{owner}
 
 Pipeline endpoints (LLM, seconds–minutes):
@@ -41,6 +42,7 @@ from dynasty_core.fantasycalc import (
     index_by_sleeper_id,
     get_value_for_sleeper_id,
 )
+from dynasty_core.leaguelogs import ATTRIBUTION_HTML, get_player_blurb
 
 LEAGUE_ID: str = LEAGUE["league_id"]
 
@@ -170,6 +172,21 @@ def player_news(sleeper_id: str) -> dict:
         "depth_chart_order": meta.get("depth_chart_order"),
         "depth_chart_position": meta.get("depth_chart_position"),
         "news_updated": meta.get("news_updated"),
+    }
+
+
+@app.get("/players/{sleeper_id}/blurb")
+def player_blurb(sleeper_id: str) -> dict:
+    """LLM-rewritten 1-3 sentence status note from LeagueLogs — narrative context
+    (role change, injury note, hot/cold streak) beyond raw stats. blurb is null
+    when LeagueLogs has no recent material for the player. Attribution to
+    LeagueLogs is required by their terms whenever this data is displayed."""
+    result = get_player_blurb(sleeper_id)
+    return {
+        "player_id": sleeper_id,
+        "blurb": result.get("blurb") if result else None,
+        "signals": result.get("signals", []) if result else [],
+        "attribution_html": ATTRIBUTION_HTML,
     }
 
 
