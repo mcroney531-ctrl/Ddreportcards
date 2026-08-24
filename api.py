@@ -131,7 +131,12 @@ def search_players(q: str = Query(..., min_length=2)) -> dict:
             "redraft_value": fc.get("redraftValue"),
             "trend_30day": fc.get("trend30Day"),
         })
-    matches.sort(key=lambda x: x["dynasty_value"] or 0, reverse=True)
+    # Primary: dynasty value descending. Tie-break (common for name collisions
+    # between an established/unsigned veteran and a rookie sharing a name,
+    # both untracked by FantasyCalc): prefer lower years_exp. A same-named
+    # rookie is far more often the one actually being asked about than an
+    # unsigned veteran with zero dynasty relevance.
+    matches.sort(key=lambda x: (-(x["dynasty_value"] or 0), x["years_exp"] if x["years_exp"] is not None else 99))
     return {"results": matches[:20]}
 
 
@@ -612,6 +617,13 @@ CHAT_SYSTEM_PROMPT = (
     'attribution line: "Powered by LeagueLogs (leaguelogs.com)" — required by their terms.\n'
     "6. For any question about whether a trade is fair, call evaluate_trade with the sleeper_ids on "
     "each side — never estimate the value delta yourself.\n"
+    "7. get_player_value can return multiple different real people who share a name (e.g. an unsigned "
+    "veteran and a rookie both named 'Antonio Williams') — it is a name search, not a single lookup. "
+    "Before using a result, check it actually matches what the user asked: if they said 'rookie' or "
+    "'draft class', match years_exp == 0, not an established or washed-up player who happens to share "
+    "the name; if they named a team or position, match that too. Never default to just the first or "
+    "highest-value result without checking it's the right person — if still ambiguous after checking, "
+    "say so and ask which one they mean instead of guessing.\n"
 )
 
 
