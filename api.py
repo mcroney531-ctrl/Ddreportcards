@@ -16,11 +16,18 @@ Fast endpoints (no LLM, sub-second):
   GET  /league/rosters/summary
   POST /trade/evaluate
 
+Chat endpoint (Claude tool-calling loop, runs server-side):
+  POST /chat   GM Command's assistant. No Netlify 10s ceiling here, and tool
+               execution is direct in-process function calls — no HTTP hop
+               back out to this same server, unlike the old Netlify-side loop.
+
 Pipeline endpoints (LLM, seconds–minutes):
   POST /report/player/{sleeper_id}   single player full card (synthesis_agent)
   POST /report/roster/{owner}        full roster pipeline + overall grade
 """
 import asyncio
+import datetime
+import json
 import os
 import sys
 
@@ -29,7 +36,8 @@ sys.path.insert(0, os.path.dirname(__file__))
 from dotenv import load_dotenv
 load_dotenv()
 
-from fastapi import FastAPI, HTTPException, Query
+from anthropic import Anthropic
+from fastapi import FastAPI, HTTPException, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
@@ -377,6 +385,297 @@ def evaluate_trade(body: TradeEvaluateRequest) -> dict:
         "fairness": _fairness_label(delta_pct, winner),
         "warnings": warnings,
     }
+
+
+# ── Chat endpoint (Claude tool-calling loop) ────────────────────────────────
+#
+# Moved here from GM Command's Netlify function. Netlify's free-tier functions
+# hard-cap at 10s; a tool-calling conversation can chain 3-5 round trips
+# (each a full Claude API call), which blew past that ceiling on anything
+# needing more than one or two tool calls. Render has no such ceiling, and
+# tool execution below calls the route functions above *directly* — no HTTP
+# hop back out to this same server like the old JS version had to do.
+
+_anthropic_client = Anthropic(api_key=os.environ.get("ANTHROPIC_API_KEY"))
+
+CHAT_TOOLS = [
+    {
+        "name": "get_player_value",
+        "description": (
+            "Look up dynasty and redraft fantasy value for a player by name. "
+            "Returns FantasyCalc dynasty value, position rank, redraft value, 30-day trend, "
+            "AND current Sleeper data: team, depth_chart_order (1=starter), status, and injury_status. "
+            "Use for any question about what a player is worth in dynasty. "
+            "Each result includes a player_id — pass it to get_player_news for full injury/practice details."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "player_name": {
+                    "type": "string",
+                    "description": "Player's full or partial name (e.g. 'Ja'Marr Chase', 'Josh Allen', 'Pollard')",
+                },
+            },
+            "required": ["player_name"],
+        },
+    },
+    {
+        "name": "get_roster",
+        "description": (
+            "Get the full skill-position roster for a dynasty team owner, with FantasyCalc dynasty "
+            "values attached to each player. Sorted by dynasty value. Use to answer questions about "
+            "roster composition, depth by position, or overall asset value."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "owner": {
+                    "type": "string",
+                    "description": "Sleeper display name of the roster owner (e.g. 'TitansTrev55')",
+                },
+            },
+            "required": ["owner"],
+        },
+    },
+    {
+        "name": "get_league_rosters_summary",
+        "description": (
+            "Get position-group depth (player count, total dynasty value, top single-asset value at "
+            "QB/RB/WR/TE) for every team in the league in one call. Use this to find trade partners: a "
+            "team thin at a position you're deep in is a target to sell to; a team overloaded at a "
+            "position you need may be willing to move a piece there. Also useful for ranking teams by "
+            "overall asset value."
+        ),
+        "input_schema": {"type": "object", "properties": {}, "required": []},
+    },
+    {
+        "name": "get_trending_players",
+        "description": (
+            "Get current trending add activity on Sleeper — players being picked up most in "
+            "the last 24 hours. Skill-position players only (QB/RB/WR/TE). "
+            "Use for waiver wire and speculative add questions."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "limit": {
+                    "type": "integer",
+                    "description": "Number of trending players to return (1-100, default 25)",
+                },
+            },
+            "required": [],
+        },
+    },
+    {
+        "name": "get_league_info",
+        "description": (
+            "Get the canonical league settings for Dynasty Daddies: scoring format, roster slots, "
+            "number of teams, PPR setting, superflex configuration, dynasty rules."
+        ),
+        "input_schema": {"type": "object", "properties": {}, "required": []},
+    },
+    {
+        "name": "get_team_roster",
+        "description": (
+            "Get all current skill-position players on an NFL team, sorted by position and depth chart order. "
+            "depth_chart_order=1 means the starter. "
+            "ALWAYS call this before naming a player's competition or backfield situation — "
+            "never assume from training data who is on a team, because players get cut and traded. "
+            "Example: call get_team_roster(\"LAC\") before saying who the Chargers RB1 is."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "team": {
+                    "type": "string",
+                    "description": 'NFL team abbreviation (e.g. "LAC", "JAX", "WAS", "KC", "SF")',
+                },
+            },
+            "required": ["team"],
+        },
+    },
+    {
+        "name": "get_player_news",
+        "description": (
+            "Get a player's CURRENT NFL status from live Sleeper data: team, depth chart position "
+            "(depth_chart_order=1 means starter), injury status, and practice participation. "
+            "Call this whenever you need to verify present-day facts — roster cuts, team changes, "
+            "depth chart shifts — because your training data is ~1 year behind. "
+            "Requires the Sleeper player_id returned by get_player_value."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "sleeper_id": {
+                    "type": "string",
+                    "description": "Sleeper player ID (the player_id field from get_player_value results)",
+                },
+            },
+            "required": ["sleeper_id"],
+        },
+    },
+    {
+        "name": "get_player_blurb",
+        "description": (
+            "Get a short LLM-written narrative blurb about a player from LeagueLogs — context on "
+            "role changes, injury notes, or hot/cold streaks beyond raw stats. Not every player has "
+            "one; blurb will be null if there is no recent material. "
+            "LeagueLogs attribution is required whenever you use this data: if blurb is non-null, "
+            'end your response with a short plain-text attribution line, e.g. "Powered by LeagueLogs (leaguelogs.com)". '
+            "Requires the Sleeper player_id returned by get_player_value."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "sleeper_id": {
+                    "type": "string",
+                    "description": "Sleeper player ID (the player_id field from get_player_value results)",
+                },
+            },
+            "required": ["sleeper_id"],
+        },
+    },
+    {
+        "name": "evaluate_trade",
+        "description": (
+            "Evaluate a proposed trade using actual FantasyCalc dynasty values — not a guess. "
+            "Give the sleeper_ids each side is sending away; returns each side's total value sent, "
+            "the net value delta, and a fairness read (even trade / slight edge / lopsided). "
+            "ALWAYS use this for any trade-fairness question instead of estimating values from memory — "
+            "get sleeper_ids from get_player_value or get_roster first."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "team_a_sends": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                    "description": "Sleeper player_ids that side A is giving up (going to side B)",
+                },
+                "team_b_sends": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                    "description": "Sleeper player_ids that side B is giving up (going to side A)",
+                },
+            },
+            "required": ["team_a_sends", "team_b_sends"],
+        },
+    },
+]
+
+
+def _execute_chat_tool(name: str, tool_input: dict) -> dict:
+    """Dispatch a Claude tool call to the matching route function above,
+    in-process — no HTTP round-trip. Route functions raise HTTPException on
+    a bad lookup (unknown player/team); convert that to an {"error": ...}
+    dict instead of letting it propagate and abort the whole chat turn."""
+    try:
+        if name == "get_player_value":
+            return search_players(q=tool_input.get("player_name", ""))
+        if name == "get_roster":
+            return roster_data(owner=tool_input.get("owner", ""))
+        if name == "get_league_rosters_summary":
+            return league_rosters_summary()
+        if name == "get_trending_players":
+            limit = min(100, max(1, tool_input.get("limit") or 25))
+            return trending_players(limit=limit)
+        if name == "get_league_info":
+            return league_info()
+        if name == "get_team_roster":
+            return team_roster(team=(tool_input.get("team") or "").upper())
+        if name == "get_player_news":
+            return player_news(sleeper_id=tool_input.get("sleeper_id", ""))
+        if name == "get_player_blurb":
+            return player_blurb(sleeper_id=tool_input.get("sleeper_id", ""))
+        if name == "evaluate_trade":
+            req = TradeEvaluateRequest(
+                team_a_sends=tool_input.get("team_a_sends") or [],
+                team_b_sends=tool_input.get("team_b_sends") or [],
+            )
+            return evaluate_trade(req)
+        return {"error": f"Unknown tool: {name}"}
+    except HTTPException as exc:
+        return {"error": str(exc.detail)}
+    except Exception as exc:  # noqa: BLE001 — tool errors must not kill the chat turn
+        return {"error": str(exc)}
+
+
+CHAT_SYSTEM_PROMPT = (
+    "Today's date is {today}. Your NFL training data has a cutoff around mid-2025 — roughly one full season behind. "
+    "CRITICAL RULES — always follow before answering:\n"
+    "1. Call get_player_value for any player you discuss to get their live team, depth_chart_order, and status.\n"
+    "2. Call get_team_roster before naming ANY player's competition or describing a backfield/WR corps — "
+    "never assume from training data who is on a team. Players get cut, traded, and replaced every offseason.\n"
+    "3. Call get_player_news for any player whose current depth chart position, injury, or team membership is central to the answer.\n"
+    "4. If a player's team in tool results is null or missing, they are a free agent or out of the league — do not claim they compete with anyone.\n"
+    "5. If you use a non-null blurb from get_player_blurb, end your response with a short plain-text "
+    'attribution line: "Powered by LeagueLogs (leaguelogs.com)" — required by their terms.\n'
+    "6. For any question about whether a trade is fair, call evaluate_trade with the sleeper_ids on "
+    "each side — never estimate the value delta yourself.\n"
+)
+
+
+@app.post("/chat")
+async def chat(request: Request) -> dict:
+    """GM Command's assistant. Accepts the same body shape the frontend has
+    always sent {model, max_tokens, messages, system?} and returns the same
+    Anthropic Messages API response shape — the frontend needs no changes.
+    Runs the tool-calling loop server-side (up to 5 rounds), same as the old
+    Netlify function, but without Netlify's 10s ceiling and without the extra
+    HTTP hop for each tool call."""
+    body = await request.json()
+
+    messages = list(body.get("messages") or [])
+    model = body.get("model") or "claude-sonnet-4-5"
+    max_tokens = body.get("max_tokens") or 1024
+    frontend_system = body.get("system")
+
+    today = datetime.date.today().isoformat()
+    system = CHAT_SYSTEM_PROMPT.format(today=today)
+    if frontend_system:
+        system += f"\n\n{frontend_system}"
+
+    final_response = None
+
+    # Tool-calling loop — continue until Claude returns a text response.
+    # Safety cap of 5 rounds prevents runaway loops.
+    for _ in range(5):
+        try:
+            resp = await asyncio.to_thread(
+                _anthropic_client.messages.create,
+                model=model,
+                max_tokens=max_tokens,
+                system=system,
+                messages=messages,
+                tools=CHAT_TOOLS,
+            )
+        except Exception as exc:  # noqa: BLE001 — surface as a normal error response
+            return {"error": str(exc)}
+
+        if resp.stop_reason != "tool_use":
+            final_response = resp
+            break
+
+        # Execute all tool_use blocks in this turn concurrently (thread pool,
+        # since the underlying Sleeper/FantasyCalc/ESPN calls are sync I/O).
+        tool_use_blocks = [b for b in resp.content if b.type == "tool_use"]
+        tool_results = await asyncio.gather(
+            *[asyncio.to_thread(_execute_chat_tool, b.name, b.input) for b in tool_use_blocks]
+        )
+
+        messages.append({"role": "assistant", "content": [b.model_dump() for b in resp.content]})
+        messages.append({
+            "role": "user",
+            "content": [
+                {"type": "tool_result", "tool_use_id": b.id, "content": json.dumps(r)}
+                for b, r in zip(tool_use_blocks, tool_results)
+            ],
+        })
+
+    if final_response is None:
+        return {"error": "Tool-calling loop reached maximum rounds without a final text response."}
+
+    return final_response.model_dump()
 
 
 # ── Pipeline endpoints (LLM calls) ─────────────────────────────────────────
