@@ -142,11 +142,49 @@ def _search_relevance(entry: dict) -> tuple:
     return (tier, -value, search_rank)
 
 
+_DEPTH_CHART_MAX = 6
+
+
+def _positional_depth_chart(all_players: dict, team: str | None, position: str | None) -> list[dict]:
+    """The live position group a player actually competes with on his current team.
+
+    This ships inside every player lookup on purpose. Describing a player's role
+    ("TE3 behind X and Y", "WR4 in Tampa") requires knowing his teammates, and if
+    the lookup doesn't carry them the model fills the gap from training data —
+    which is a full season stale and will name players who have since been traded
+    or cut. Returning the real group closes that gap by construction instead of
+    depending on a second tool call being made.
+
+    Capped at the top few by depth_chart_order: past that it's camp bodies, not
+    competition. Players with no depth_chart_order sort last.
+    """
+    if not team or not position:
+        return []
+    group = [
+        {
+            "player_id": pid,
+            "name": tp.get("full_name"),
+            "depth_chart_order": tp.get("depth_chart_order"),
+            "status": tp.get("status"),
+            "injury_status": tp.get("injury_status"),
+        }
+        for pid, tp in all_players.items()
+        if (tp.get("team") or "").upper() == team.upper()
+        and tp.get("position") == position
+    ]
+    group.sort(key=lambda x: x["depth_chart_order"] if x["depth_chart_order"] is not None else 99)
+    return group[:_DEPTH_CHART_MAX]
+
+
 @app.get("/players/search")
 def search_players(q: str = Query(..., min_length=2)) -> dict:
     """Case-insensitive substring search across all Sleeper skill-position players.
     Returns up to 20 results ordered by real-world relevance — rostered players
-    ahead of unsigned ones, then by dynasty value. See _search_relevance."""
+    ahead of unsigned ones, then by dynasty value. See _search_relevance.
+
+    Each result carries team_depth_chart: the player's live position group on his
+    current team, so role/competition claims never have to come from stale
+    training data. See _positional_depth_chart."""
     all_p = get_all_players()
     fc_values = get_dynasty_values()
     fc_index = index_by_sleeper_id(fc_values)
@@ -175,6 +213,7 @@ def search_players(q: str = Query(..., min_length=2)) -> dict:
             "dynasty_pos_rank": fc.get("positionRank"),
             "redraft_value": fc.get("redraftValue"),
             "trend_30day": fc.get("trend30Day"),
+            "team_depth_chart": _positional_depth_chart(all_p, p.get("team"), p.get("position")),
         })
     matches.sort(key=_search_relevance)
     return {"results": matches[:20]}
@@ -230,6 +269,7 @@ def player_news(sleeper_id: str) -> dict:
         "depth_chart_order": meta.get("depth_chart_order"),
         "depth_chart_position": meta.get("depth_chart_position"),
         "news_updated": meta.get("news_updated"),
+        "team_depth_chart": _positional_depth_chart(all_p, meta.get("team"), meta.get("position")),
     }
 
 
@@ -649,8 +689,13 @@ CHAT_SYSTEM_PROMPT = (
     "Today's date is {today}. Your NFL training data has a cutoff around mid-2025 — roughly one full season behind. "
     "CRITICAL RULES — always follow before answering:\n"
     "1. Call get_player_value for any player you discuss to get their live team, depth_chart_order, and status.\n"
-    "2. Call get_team_roster before naming ANY player's competition or describing a backfield/WR corps — "
-    "never assume from training data who is on a team. Players get cut, traded, and replaced every offseason.\n"
+    "2. NEVER name a player's teammates, competition, or depth-chart situation from memory. Every "
+    "get_player_value and get_player_news result already includes team_depth_chart — the player's real "
+    "current position group on his team. Use ONLY the names in it. If you are about to write something "
+    "like \"TE3 behind X and Y\" or \"WR4 in Tampa\", every player you name must appear in that "
+    "team_depth_chart; if a name you were about to use isn't there, he has been traded or cut — leave "
+    "him out. Call get_team_roster when you need a team's full group across positions. Players move "
+    "every offseason and your training data will name the wrong ones.\n"
     "3. Call get_player_news for any player whose current depth chart position, injury, or team membership is central to the answer.\n"
     "4. If a player's team in tool results is null or missing, they are a free agent or out of the league — do not claim they compete with anyone.\n"
     "5. If you use a non-null blurb from get_player_blurb, end your response with a short plain-text "
