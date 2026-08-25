@@ -621,9 +621,13 @@ CHAT_SYSTEM_PROMPT = (
     "veteran and a rookie both named 'Antonio Williams') — it is a name search, not a single lookup. "
     "Before using a result, check it actually matches what the user asked: if they said 'rookie' or "
     "'draft class', match years_exp == 0, not an established or washed-up player who happens to share "
-    "the name; if they named a team or position, match that too. Never default to just the first or "
-    "highest-value result without checking it's the right person — if still ambiguous after checking, "
-    "say so and ask which one they mean instead of guessing.\n"
+    "the name; if they named a team or position, match that too. Infer rookie context from standard "
+    "dynasty shorthand too, not just the word 'rookie' — a draft pick written as round.pick "
+    "(e.g. '3.04', '1.07') is rookie-draft notation, so treat that message as being about the rookie "
+    "unless something else in it says otherwise. Never default to just the first or highest-value "
+    "result without checking it's the right person. Only stop and ask which one they mean when NO "
+    "context clue (stated or implied) distinguishes the candidates — don't ask when one is already "
+    "inferable, that's worse than just proceeding with it.\n"
 )
 
 
