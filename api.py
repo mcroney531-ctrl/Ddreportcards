@@ -99,10 +99,54 @@ def trending_players(limit: int = Query(default=25, ge=1, le=100)) -> dict:
     return {"trending_adds": result}
 
 
+def _search_relevance(entry: dict) -> tuple:
+    """Rank name-search hits by real-world relevance, most relevant first.
+
+    Sorting on dynasty value alone is wrong for name collisions: two obscure
+    players who share a name both score 0, so the tie broke arbitrarily —
+    which is how an unsigned veteran nobody has heard of outranked a rostered
+    rookie playing this season.
+
+    Being on an NFL roster is the strongest relevance signal available. A
+    player with no team is not playing this season; a rostered one is,
+    regardless of whether FantasyCalc tracks them yet (it lags on rookies and
+    late-round picks). Ordering, most to least significant:
+
+      1. Tier: rostered-and-valued > valued-but-unsigned > rostered >
+         neither. Tiers 1 and 2 are the interesting boundary — a player
+         FantasyCalc actually prices is a real dynasty asset even between
+         contracts, so that outranks rostered-but-untracked depth.
+      2. Dynasty value, descending.
+      3. Sleeper's own search_rank — what Sleeper orders its player search
+         by; lower is more prominent, and it assigns huge values to
+         irrelevant players. Missing is treated as least relevant, so this
+         degrades safely if the field ever disappears.
+    """
+    has_team = bool(entry.get("team"))
+    value = entry.get("dynasty_value") or 0
+    has_value = value > 0
+
+    if has_team and has_value:
+        tier = 0
+    elif has_value:
+        tier = 1
+    elif has_team:
+        tier = 2
+    else:
+        tier = 3
+
+    search_rank = entry.get("search_rank")
+    if search_rank is None:
+        search_rank = 10 ** 9
+
+    return (tier, -value, search_rank)
+
+
 @app.get("/players/search")
 def search_players(q: str = Query(..., min_length=2)) -> dict:
     """Case-insensitive substring search across all Sleeper skill-position players.
-    Returns up to 20 results sorted by dynasty value (highest first)."""
+    Returns up to 20 results ordered by real-world relevance — rostered players
+    ahead of unsigned ones, then by dynasty value. See _search_relevance."""
     all_p = get_all_players()
     fc_values = get_dynasty_values()
     fc_index = index_by_sleeper_id(fc_values)
@@ -126,17 +170,13 @@ def search_players(q: str = Query(..., min_length=2)) -> dict:
             "injury_status": p.get("injury_status"),
             "depth_chart_order": p.get("depth_chart_order"),
             "depth_chart_position": p.get("depth_chart_position"),
+            "search_rank": p.get("search_rank"),
             "dynasty_value": fc.get("value"),
             "dynasty_pos_rank": fc.get("positionRank"),
             "redraft_value": fc.get("redraftValue"),
             "trend_30day": fc.get("trend30Day"),
         })
-    # Primary: dynasty value descending. Tie-break (common for name collisions
-    # between an established/unsigned veteran and a rookie sharing a name,
-    # both untracked by FantasyCalc): prefer lower years_exp. A same-named
-    # rookie is far more often the one actually being asked about than an
-    # unsigned veteran with zero dynasty relevance.
-    matches.sort(key=lambda x: (-(x["dynasty_value"] or 0), x["years_exp"] if x["years_exp"] is not None else 99))
+    matches.sort(key=_search_relevance)
     return {"results": matches[:20]}
 
 
@@ -617,17 +657,15 @@ CHAT_SYSTEM_PROMPT = (
     'attribution line: "Powered by LeagueLogs (leaguelogs.com)" — required by their terms.\n'
     "6. For any question about whether a trade is fair, call evaluate_trade with the sleeper_ids on "
     "each side — never estimate the value delta yourself.\n"
-    "7. get_player_value can return multiple different real people who share a name (e.g. an unsigned "
-    "veteran and a rookie both named 'Antonio Williams') — it is a name search, not a single lookup. "
-    "Before using a result, check it actually matches what the user asked: if they said 'rookie' or "
-    "'draft class', match years_exp == 0, not an established or washed-up player who happens to share "
-    "the name; if they named a team or position, match that too. Infer rookie context from standard "
-    "dynasty shorthand too, not just the word 'rookie' — a draft pick written as round.pick "
-    "(e.g. '3.04', '1.07') is rookie-draft notation, so treat that message as being about the rookie "
-    "unless something else in it says otherwise. Never default to just the first or highest-value "
-    "result without checking it's the right person. Only stop and ask which one they mean when NO "
-    "context clue (stated or implied) distinguishes the candidates — don't ask when one is already "
-    "inferable, that's worse than just proceeding with it.\n"
+    "7. get_player_value is a name search, not a single lookup — it can return several different "
+    "real people who share a name. Results come back ordered by real-world relevance (players on an "
+    "NFL roster first, then by dynasty value), so the first hit is normally the one meant. Prefer it "
+    "unless something in the question points elsewhere — a stated team, position, or draft context. "
+    "A player whose team is null is unsigned and not playing this season: never lead with one of "
+    "those over a rostered player of the same name, and don't present an unsigned player as a real "
+    "option unless the user specifically asked about him. Ask which player is meant only when the "
+    "candidates are genuinely comparable and nothing distinguishes them — not merely because the "
+    "name returned more than one row.\n"
 )
 
 
