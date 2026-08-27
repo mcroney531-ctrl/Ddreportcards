@@ -144,6 +144,33 @@ def _search_relevance(entry: dict) -> tuple:
 
 _DEPTH_CHART_MAX = 6
 
+# Named assets per position group in the league summary. Enough for the model
+# to cite a roster's real top pieces without dumping all 12 rosters in full.
+_SUMMARY_TOP_N = 3
+
+
+def _experience(years_exp) -> dict:
+    """Turn Sleeper's raw years_exp into something that can't be misread.
+
+    Shipping the bare integer meant the model had to infer rookie status, and
+    it inferred wrong — calling second-year players (2025 draftees) "rookies"
+    in a 2026 conversation. Sleeper counts completed NFL seasons, so 0 is a
+    true rookie and 1 is a player in his second season. Return both the flag
+    and a ready-made label so a description never has to do that arithmetic.
+    """
+    if years_exp is None:
+        return {"is_rookie": False, "experience_label": "experience unknown"}
+    try:
+        n = int(years_exp)
+    except (TypeError, ValueError):
+        return {"is_rookie": False, "experience_label": "experience unknown"}
+    if n <= 0:
+        return {"is_rookie": True, "experience_label": "rookie (1st NFL season)"}
+    ordinals = {1: "2nd", 2: "3rd", 3: "4th", 4: "5th"}
+    if n in ordinals:
+        return {"is_rookie": False, "experience_label": f"{ordinals[n]} NFL season"}
+    return {"is_rookie": False, "experience_label": f"veteran ({n} seasons played)"}
+
 
 def _positional_depth_chart(all_players: dict, team: str | None, position: str | None) -> list[dict]:
     """The live position group a player actually competes with on his current team.
@@ -204,6 +231,7 @@ def search_players(q: str = Query(..., min_length=2)) -> dict:
             "team": p.get("team"),
             "age": p.get("age"),
             "years_exp": p.get("years_exp"),
+            **_experience(p.get("years_exp")),
             "status": p.get("status"),
             "injury_status": p.get("injury_status"),
             "depth_chart_order": p.get("depth_chart_order"),
@@ -234,6 +262,7 @@ def player_info(sleeper_id: str) -> dict:
         "team": meta.get("team"),
         "age": meta.get("age"),
         "years_exp": meta.get("years_exp"),
+        **_experience(meta.get("years_exp")),
         "status": meta.get("status"),
         "injury_status": meta.get("injury_status"),
         "depth_chart_order": meta.get("depth_chart_order"),
@@ -312,6 +341,7 @@ def team_roster(team: str) -> dict:
             "injury_status": p.get("injury_status"),
             "age": p.get("age"),
             "years_exp": p.get("years_exp"),
+            **_experience(p.get("years_exp")),
             "dynasty_value": fc.get("value"),
             "dynasty_pos_rank": fc.get("positionRank"),
         })
@@ -345,6 +375,7 @@ def roster_data(owner: str) -> dict:
             "team": p.get("team"),
             "age": p.get("age"),
             "years_exp": p.get("years_exp"),
+            **_experience(p.get("years_exp")),
             "status": p.get("status"),
             "injury_status": p.get("injury_status"),
             "dynasty_value": fc.get("value"),
@@ -375,18 +406,33 @@ def league_rosters_summary() -> dict:
     teams = []
     for roster in rosters:
         owner = owner_by_user_id.get(roster.get("owner_id"), "Unknown")
-        pos_values: dict[str, list[int]] = {"QB": [], "RB": [], "WR": [], "TE": []}
+        # Carry names alongside values. Returning only counts and a bare
+        # top_value gave the model numbers with nobody attached to them, so
+        # when it described a roster it had to pair those figures with names
+        # from somewhere else — and it paired them wrong, naming middling
+        # players as the top assets and omitting the actual best ones.
+        pos_players: dict[str, list[dict]] = {"QB": [], "RB": [], "WR": [], "TE": []}
         for pid in roster.get("players") or []:
             meta = all_p.get(pid)
-            if not meta or meta.get("position") not in pos_values:
+            if not meta or meta.get("position") not in pos_players:
                 continue
             fc = fc_index.get(pid)
-            pos_values[meta["position"]].append((fc.get("value") if fc else 0) or 0)
+            pos_players[meta["position"]].append({
+                "player_id": pid,
+                "name": meta.get("full_name"),
+                "team": meta.get("team"),
+                "dynasty_value": (fc.get("value") if fc else 0) or 0,
+            })
 
-        positions = {
-            pos: {"count": len(values), "total_value": sum(values), "top_value": max(values, default=0)}
-            for pos, values in pos_values.items()
-        }
+        positions = {}
+        for pos, plist in pos_players.items():
+            plist.sort(key=lambda x: x["dynasty_value"], reverse=True)
+            positions[pos] = {
+                "count": len(plist),
+                "total_value": sum(p["dynasty_value"] for p in plist),
+                "top_value": plist[0]["dynasty_value"] if plist else 0,
+                "top_players": plist[:_SUMMARY_TOP_N],
+            }
         teams.append({
             "owner": owner,
             "total_dynasty_value": sum(p["total_value"] for p in positions.values()),
@@ -711,6 +757,20 @@ CHAT_SYSTEM_PROMPT = (
     "option unless the user specifically asked about him. Ask which player is meant only when the "
     "candidates are genuinely comparable and nothing distinguishes them — not merely because the "
     "name returned more than one row.\n"
+    "8. Before assessing the user's own team — its outlook, its holes, whether it is rebuilding or "
+    "contending, who its best assets are — call get_roster for the user's roster. The roster list in "
+    "the system prompt carries names but no values, and get_league_rosters_summary carries values and "
+    "counts. Judging the team from those two alone means guessing which name goes with which number, "
+    "and that guess will be wrong. Name a player as a top asset only if a tool result actually shows "
+    "him at that value.\n"
+    "9. Never state or imply how long a player has been in the league from memory. Every player "
+    "result carries is_rookie and experience_label — use them verbatim. Only call someone a rookie "
+    "when is_rookie is true; a player with experience_label \"2nd NFL season\" was drafted last year "
+    "and is not a rookie. This applies to phrases like \"rookie class\", \"your rookies\", and "
+    "\"first-year player\" just as much as to the word itself.\n"
+    "10. When the user pushes back with a name you didn't mention, treat it as a gap in what you "
+    "looked up, not a disagreement — look the player up before responding, and correct the earlier "
+    "assessment if the data warrants it.\n"
 )
 
 
