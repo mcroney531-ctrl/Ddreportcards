@@ -29,6 +29,7 @@ import asyncio
 import datetime
 import json
 import os
+import re
 import sys
 import time
 
@@ -490,9 +491,58 @@ def league_rosters_summary() -> dict:
 class TradeEvaluateRequest(BaseModel):
     team_a_sends: list[str]
     team_b_sends: list[str]
+    # Free text, e.g. "2029 2nd", "2028 3rd Rd". Draft picks have no Sleeper
+    # id and no value source, so they cannot ride in the id lists — but a
+    # trade that contains them is not the trade the player lists describe.
+    team_a_picks: list[str] = []
+    team_b_picks: list[str] = []
 
 
-def _describe_trade_side(sleeper_ids: list[str], all_players: dict, fc_index: dict) -> dict:
+_ORDINALS = {
+    "1st": "1st", "first": "1st", "2nd": "2nd", "second": "2nd",
+    "3rd": "3rd", "third": "3rd", "4th": "4th", "fourth": "4th",
+    "5th": "5th", "fifth": "5th", "6th": "6th", "sixth": "6th",
+    "7th": "7th", "seventh": "7th",
+}
+_ORD_ALT = "|".join(_ORDINALS)
+# "2029 2nd Rd" and "2nd round 2029" are the two ways this actually gets typed.
+_PICK_YEAR_FIRST = re.compile(rf"\b(20\d{{2}})\s*(?:season\s+)?({_ORD_ALT})\b", re.I)
+_PICK_ORD_FIRST = re.compile(
+    rf"\b({_ORD_ALT})\s*(?:round|rd\.?)?\s*(?:pick\s*)?(?:in\s+)?(20\d{{2}})\b", re.I
+)
+
+
+def _normalize_pick(text: str) -> str | None:
+    """Turn a written pick reference into a canonical 'YYYY Nth', or None."""
+    m = _PICK_YEAR_FIRST.search(text or "")
+    if m:
+        return f"{m.group(1)} {_ORDINALS[m.group(2).lower()]}"
+    m = _PICK_ORD_FIRST.search(text or "")
+    if m:
+        return f"{m.group(2)} {_ORDINALS[m.group(1).lower()]}"
+    return None
+
+
+def find_picks_in_text(text: str) -> list[str]:
+    """Every distinct pick mentioned in a block of prose, in order of appearance.
+
+    Used to catch a trade evaluated without its picks: if the conversation
+    names picks and the tool call did not carry any, the numbers describe a
+    different trade than the one asked about.
+    """
+    found: list[str] = []
+    for regex, order in ((_PICK_YEAR_FIRST, "year"), (_PICK_ORD_FIRST, "ord")):
+        for m in regex.finditer(text or ""):
+            year, ordinal = (m.group(1), m.group(2)) if order == "year" else (m.group(2), m.group(1))
+            pick = f"{year} {_ORDINALS[ordinal.lower()]}"
+            if pick not in found:
+                found.append(pick)
+    return found
+
+
+def _describe_trade_side(
+    sleeper_ids: list[str], all_players: dict, fc_index: dict, picks: list[str] | None = None
+) -> dict:
     players = []
     total_value = 0
     unknown_ids = []
@@ -512,7 +562,18 @@ def _describe_trade_side(sleeper_ids: list[str], all_players: dict, fc_index: di
             "dynasty_pos_rank": fc.get("positionRank") if fc else None,
             "unvalued": fc is None,
         })
-    return {"players": players, "total_value": total_value, "unknown_ids": unknown_ids}
+    described_picks = [
+        {"as_written": raw, "pick": _normalize_pick(raw) or raw, "dynasty_value": None}
+        for raw in (picks or [])
+    ]
+    return {
+        "players": players,
+        "total_value": total_value,
+        "unknown_ids": unknown_ids,
+        "picks": described_picks,
+        # Named so it cannot be read as the value of everything on this side.
+        "player_value_only": total_value,
+    }
 
 
 _user_roster_cache: tuple[float, set[str]] | None = None
@@ -600,8 +661,8 @@ def evaluate_trade(body: TradeEvaluateRequest) -> dict:
     all_p = get_all_players()
     fc_index = index_by_sleeper_id(get_dynasty_values())
 
-    team_a = _describe_trade_side(body.team_a_sends, all_p, fc_index)
-    team_b = _describe_trade_side(body.team_b_sends, all_p, fc_index)
+    team_a = _describe_trade_side(body.team_a_sends, all_p, fc_index, body.team_a_picks)
+    team_b = _describe_trade_side(body.team_b_sends, all_p, fc_index, body.team_b_picks)
 
     a_value, b_value = team_a["total_value"], team_b["total_value"]
     net_to_a = b_value - a_value
@@ -614,17 +675,47 @@ def evaluate_trade(body: TradeEvaluateRequest) -> dict:
         for pid in side["unknown_ids"]:
             warnings.append(f"Unknown sleeper_id {pid!r} in {label} — not a tracked skill-position player")
 
-    return {
+    # There is no pick-value source in this build. When a trade contains
+    # picks, the player math describes a DIFFERENT trade than the one asked
+    # about, so no fairness verdict is returned at all.
+    #
+    # This is the bug that produced "lopsided in your favor — and you're
+    # keeping three picks." The picks could not be expressed here, so the
+    # tool returned a confident verdict for the players-only trade, and the
+    # only way to reconcile that surplus with the picks in the question was
+    # to invent that they stayed. Withholding the verdict removes the thing
+    # there was to reconcile.
+    all_picks = team_a["picks"] + team_b["picks"]
+    result = {
         "team_a_sends": team_a["players"],
-        "team_a_value_sent": a_value,
+        "team_a_picks_sent": team_a["picks"],
+        "team_a_player_value_sent": a_value,
         "team_b_sends": team_b["players"],
-        "team_b_value_sent": b_value,
-        "net_value_to_team_a": net_to_a,
-        "value_delta_pct": delta_pct,
-        "fairness": _fairness_label(delta_pct, winner),
+        "team_b_picks_sent": team_b["picks"],
+        "team_b_player_value_sent": b_value,
+        "net_player_value_to_team_a": net_to_a,
+        "player_value_delta_pct": delta_pct,
         "direction": _trade_direction(body.team_a_sends, body.team_b_sends),
         "warnings": warnings,
     }
+
+    if all_picks:
+        result["fairness"] = None
+        result["verdict_withheld"] = (
+            "This trade includes draft picks and there is no pick-value source "
+            "in this build, so NO fairness verdict is available and none may be "
+            "implied. The value numbers above cover the players ONLY — do not "
+            "present them as the value of the trade, and do not describe either "
+            "side as winning or losing on value. State which picks each side is "
+            "sending (they are listed above), say plainly that they are not "
+            "priced, and judge the deal on the players plus his own read of what "
+            "the picks are worth."
+        )
+        result["picks_in_trade"] = [p["pick"] for p in all_picks]
+    else:
+        result["fairness"] = _fairness_label(delta_pct, winner)
+
+    return result
 
 
 # ── Chat endpoint (Claude tool-calling loop) ────────────────────────────────
@@ -785,7 +876,12 @@ CHAT_TOOLS = [
             "get sleeper_ids from get_player_value or get_roster first. "
             "team_a/team_b are just labels — the response's `direction` field resolves which side is "
             "actually the user by checking who is on his roster, and flags a conflict if you split the "
-            "players the wrong way. Read it before saying who wins."
+            "players the wrong way. Read it before saying who wins. "
+            "DRAFT PICKS: if the trade includes any, you MUST pass them in team_a_picks/team_b_picks "
+            "on the correct sides. Picks have no value source, so including them makes the tool "
+            "withhold the fairness verdict — that is the correct outcome, not a failure. Omitting "
+            "them does not get you a usable verdict either: the tool checks what the user wrote and "
+            "withholds it anyway."
         ),
         "input_schema": {
             "type": "object",
@@ -800,6 +896,22 @@ CHAT_TOOLS = [
                     "items": {"type": "string"},
                     "description": "Sleeper player_ids that side B is giving up (going to side A)",
                 },
+                "team_a_picks": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                    "description": (
+                        "Draft picks side A is giving up, as written, e.g. [\"2029 2nd\", "
+                        "\"2028 3rd\"]. Required whenever the trade involves picks."
+                    ),
+                },
+                "team_b_picks": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                    "description": (
+                        "Draft picks side B is giving up, as written, e.g. [\"2027 4th\"]. "
+                        "Required whenever the trade involves picks."
+                    ),
+                },
             },
             "required": ["team_a_sends", "team_b_sends"],
         },
@@ -807,11 +919,16 @@ CHAT_TOOLS = [
 ]
 
 
-def _execute_chat_tool(name: str, tool_input: dict) -> dict:
+def _execute_chat_tool(name: str, tool_input: dict, conversation_text: str = "") -> dict:
     """Dispatch a Claude tool call to the matching route function above,
     in-process — no HTTP round-trip. Route functions raise HTTPException on
     a bad lookup (unknown player/team); convert that to an {"error": ...}
-    dict instead of letting it propagate and abort the whole chat turn."""
+    dict instead of letting it propagate and abort the whole chat turn.
+
+    conversation_text is what the user actually wrote this conversation. It
+    exists so a trade evaluation can be checked against the trade that was
+    proposed, rather than trusting that every part of it made it into the
+    call."""
     try:
         if name == "get_player_value":
             return search_players(q=tool_input.get("player_name", ""))
@@ -831,11 +948,34 @@ def _execute_chat_tool(name: str, tool_input: dict) -> dict:
         if name == "get_player_blurb":
             return player_blurb(sleeper_id=tool_input.get("sleeper_id", ""))
         if name == "evaluate_trade":
+            a_picks = tool_input.get("team_a_picks") or []
+            b_picks = tool_input.get("team_b_picks") or []
             req = TradeEvaluateRequest(
                 team_a_sends=tool_input.get("team_a_sends") or [],
                 team_b_sends=tool_input.get("team_b_sends") or [],
+                team_a_picks=a_picks,
+                team_b_picks=b_picks,
             )
-            return evaluate_trade(req)
+            result = evaluate_trade(req)
+
+            # A pick left out of the call is invisible to everything above —
+            # the math would come back clean and describe a trade nobody
+            # proposed. Compare against what the user actually wrote and
+            # pull the verdict if anything is missing, rather than relying
+            # on the call having been complete.
+            if not (a_picks or b_picks):
+                mentioned = find_picks_in_text(conversation_text)
+                if mentioned:
+                    result["fairness"] = None
+                    result["verdict_withheld"] = (
+                        "This evaluation was run with NO picks, but the conversation "
+                        f"mentions {', '.join(mentioned)}. The numbers above therefore "
+                        "describe a different trade than the one asked about, and no "
+                        "fairness verdict is available. Call evaluate_trade again with "
+                        "team_a_picks and team_b_picks filled in on the correct sides."
+                    )
+                    result["picks_mentioned_but_not_evaluated"] = mentioned
+            return result
         return {"error": f"Unknown tool: {name}"}
     except HTTPException as exc:
         return {"error": str(exc.detail)}
@@ -859,7 +999,13 @@ CHAT_SYSTEM_PROMPT = (
     "5. If you use a non-null blurb from get_player_blurb, end your response with a short plain-text "
     'attribution line: "Powered by LeagueLogs (leaguelogs.com)" — required by their terms.\n'
     "6. For any question about whether a trade is fair, call evaluate_trade with the sleeper_ids on "
-    "each side — never estimate the value delta yourself.\n"
+    "each side — never estimate the value delta yourself. If the trade includes draft picks, put "
+    "them in team_a_picks/team_b_picks on the correct sides. Picks are not priced anywhere in this "
+    "build, so a trade containing them gets NO fairness verdict and you must not supply one: say "
+    "which picks each side is sending, say plainly that they are unpriced, give him the player math "
+    "labelled as players-only, and make the call on that plus his own read of the picks. Never let "
+    "a players-only number stand in for the whole trade — a surplus that ignores three outgoing "
+    "picks is not a surplus.\n"
     "7. get_player_value is a name search, not a single lookup — it can return several different "
     "real people who share a name. Results come back ordered by real-world relevance (players on an "
     "NFL roster first, then by dynasty value), so the first hit is normally the one meant. Prefer it "
@@ -918,7 +1064,11 @@ CHAT_SYSTEM_PROMPT = (
     "30-day trend, nothing older — so \"he fell from QB8 to QB20\" is invented.\n"
     "    - What another manager wants, believes, or is trying to do. Rosters are visible; motives "
     "are not.\n"
-    "    - Contract details, draft position, or draft-pick values.\n"
+    "    - Contract details, or what a draft pick is worth. There is no pick-value source here, so "
+    "\"a 2029 2nd is basically worthless\" and \"your future 2nds are gold\" are equally invented. "
+    "What a pick is worth to him depends on where his team finishes and how his league trades, "
+    "which he knows and you do not — ask him rather than asserting either way, and never let your "
+    "read of a pick drift to match whichever side he is currently arguing.\n"
     "  Who throws to a player IS available: every lookup returns team_qbs, his team's current QB "
     "room. Use it and name nobody else — quarterbacks change teams, and naming one from memory is "
     "how a receiver ends up catching passes from someone who left years ago.\n"
@@ -949,16 +1099,26 @@ def _conversation_stance(messages: list) -> str:
         return ""
     return (
         "\n\nTHIS IS A FOLLOW-UP TURN. You already gave him a position earlier in this "
-        "conversation. Before you answer, decide which of these just happened:\n"
-        "  (a) He gave you NEW INFORMATION — a checkable fact, or he caught a real error. "
-        "Verify it with a tool if you can, then update and say exactly what changed.\n"
-        "  (b) He gave you NEW FRAMING — an argument, a priority, or displeasure about "
-        "factors already in front of you. Weigh it honestly and say how much it moves "
-        "things, but do not reverse the verdict just because he pushed.\n"
+        "conversation. Work out privately what he just did before you answer.\n"
+        "  If he gave you a checkable fact, or caught a real error: verify it with a tool "
+        "if you can, then update and say exactly what changed.\n"
+        "  If he gave you an argument, a priority, or displeasure about factors already in "
+        "front of you: weigh it honestly and say how much it moves things, but do not "
+        "reverse the verdict just because he pushed.\n"
+        "  Feelings are that second kind. \"I love this guy\", \"it would pain me\", \"I "
+        "can't stomach it\" tell you about his conviction, not about the deal. Conviction "
+        "is worth naming and worth working around — it is never a reason to flip a verdict "
+        "the evidence still supports. When his gut is the obstacle, restructure instead of "
+        "capitulating: find the version of the deal that keeps the piece he cannot part "
+        "with, and propose it yourself. If you have already reasoned your way to that swap "
+        "earlier in the conversation, say so then, not after he thinks of it.\n"
         "If you find yourself about to write \"you're absolutely right\" or \"that changes "
-        "everything\", stop and check you are in case (a). Reversing on (b) makes you an "
-        "echo of whatever he said last, which is the one thing that makes this tool useless "
-        "to him."
+        "everything\", stop and check he actually handed you a new fact. Reversing on "
+        "pressure alone makes you an echo of whatever he said last, which is the one thing "
+        "that makes this tool useless to him.\n"
+        "Never narrate any of this. Do not label his message, do not name these categories, "
+        "and do not tell him which kind of pushback he just made — he is here for the "
+        "football read, not for a description of how you weighed it."
     )
 
 
@@ -1026,8 +1186,18 @@ async def chat(request: Request) -> dict:
         # Execute all tool_use blocks in this turn concurrently (thread pool,
         # since the underlying Sleeper/FantasyCalc/ESPN calls are sync I/O).
         tool_use_blocks = [b for b in resp.content if b.type == "tool_use"]
+        # The user's own turns only. Tool results are appended as user-role
+        # messages with list content, so filtering to plain strings keeps
+        # this to what he actually typed.
+        conversation_text = "\n".join(
+            m["content"] for m in messages
+            if m.get("role") == "user" and isinstance(m.get("content"), str)
+        )
         tool_results = await asyncio.gather(
-            *[asyncio.to_thread(_execute_chat_tool, b.name, b.input) for b in tool_use_blocks]
+            *[
+                asyncio.to_thread(_execute_chat_tool, b.name, b.input, conversation_text)
+                for b in tool_use_blocks
+            ]
         )
 
         messages.append({"role": "assistant", "content": [b.model_dump() for b in resp.content]})
