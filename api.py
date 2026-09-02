@@ -30,6 +30,7 @@ import datetime
 import json
 import os
 import sys
+import time
 
 sys.path.insert(0, os.path.dirname(__file__))
 
@@ -471,6 +472,70 @@ def _describe_trade_side(sleeper_ids: list[str], all_players: dict, fc_index: di
     return {"players": players, "total_value": total_value, "unknown_ids": unknown_ids}
 
 
+_user_roster_cache: tuple[float, set[str]] | None = None
+_USER_ROSTER_TTL_SECONDS = 5 * 60
+
+
+def _user_roster_ids() -> set[str]:
+    """Sleeper player_ids currently on the user's own roster.
+
+    Used to settle which direction a trade runs. Cached briefly because a
+    trade evaluation shouldn't re-fetch the league on every call.
+    """
+    global _user_roster_cache
+    now = time.time()
+    if _user_roster_cache and (now - _user_roster_cache[0]) < _USER_ROSTER_TTL_SECONDS:
+        return _user_roster_cache[1]
+    try:
+        roster = get_roster_by_display_name(LEAGUE_ID, LEAGUE["my_display_name"])
+        ids = set(roster.get("players") or [])
+    except Exception:  # noqa: BLE001 — direction hinting must never break trade math
+        return _user_roster_cache[1] if _user_roster_cache else set()
+    _user_roster_cache = (now, ids)
+    return ids
+
+
+def _trade_direction(team_a_ids: list[str], team_b_ids: list[str]) -> dict:
+    """Work out which side of a proposed trade is the user's, from roster facts.
+
+    "A, B for C, D" doesn't say who sends what — the same sentence reads as
+    buying or selling depending on the speaker, and the model was deciding
+    from grammar alone and getting opposite verdicts on identical input.
+    Roster membership settles it: a player already on the user's roster can
+    only be leaving, and one who isn't can only be arriving.
+
+    Returns the inference plus the evidence, so a caller can state which way
+    it read the trade rather than assuming silently.
+    """
+    owned = _user_roster_ids()
+    if not owned:
+        return {"user_side": "unknown", "reason": "Could not load your roster to check ownership."}
+
+    a_owned = [pid for pid in team_a_ids if pid in owned]
+    b_owned = [pid for pid in team_b_ids if pid in owned]
+
+    if a_owned and not b_owned:
+        side, reason = "team_a", f"{len(a_owned)} of the team_a players are on your roster, so team_a is you sending."
+    elif b_owned and not a_owned:
+        side, reason = "team_b", f"{len(b_owned)} of the team_b players are on your roster, so team_b is you sending."
+    elif a_owned and b_owned:
+        side, reason = "conflict", (
+            "Players from BOTH sides are on your roster — the split is wrong. "
+            "Re-check which players you are actually sending before judging this trade."
+        )
+    else:
+        side, reason = "unknown", (
+            "Neither side's players are on your roster. This may be a trade between two other teams, "
+            "or the roster is stale."
+        )
+    return {
+        "user_side": side,
+        "reason": reason,
+        "team_a_on_your_roster": a_owned,
+        "team_b_on_your_roster": b_owned,
+    }
+
+
 def _fairness_label(delta_pct: float, winner: str | None) -> str:
     if winner is None or delta_pct < 5:
         return "even trade"
@@ -514,6 +579,7 @@ def evaluate_trade(body: TradeEvaluateRequest) -> dict:
         "net_value_to_team_a": net_to_a,
         "value_delta_pct": delta_pct,
         "fairness": _fairness_label(delta_pct, winner),
+        "direction": _trade_direction(body.team_a_sends, body.team_b_sends),
         "warnings": warnings,
     }
 
@@ -673,7 +739,10 @@ CHAT_TOOLS = [
             "Give the sleeper_ids each side is sending away; returns each side's total value sent, "
             "the net value delta, and a fairness read (even trade / slight edge / lopsided). "
             "ALWAYS use this for any trade-fairness question instead of estimating values from memory — "
-            "get sleeper_ids from get_player_value or get_roster first."
+            "get sleeper_ids from get_player_value or get_roster first. "
+            "team_a/team_b are just labels — the response's `direction` field resolves which side is "
+            "actually the user by checking who is on his roster, and flags a conflict if you split the "
+            "players the wrong way. Read it before saying who wins."
         ),
         "input_schema": {
             "type": "object",
@@ -771,6 +840,14 @@ CHAT_SYSTEM_PROMPT = (
     "10. When the user pushes back with a name you didn't mention, treat it as a gap in what you "
     "looked up, not a disagreement — look the player up before responding, and correct the earlier "
     "assessment if the data warrants it.\n"
+    "11. Never decide which way a trade runs from sentence order. \"A, B for C, D\" reads as buying "
+    "or selling depending on who is speaking, and guessing wrong inverts the entire verdict. "
+    "Roster membership settles it: a player already on the user's roster can only be leaving, and "
+    "one who is not can only be arriving. evaluate_trade returns a `direction` field that resolves "
+    "this against his actual roster — trust it over the wording. If it reports a conflict (players "
+    "from both sides are on his roster) your split is wrong: fix it before judging. If it reports "
+    "unknown, state which way you read the trade so a wrong reading is visible. Open any trade "
+    "verdict by naming what he sends and what he gets, so the direction is never implied.\n"
 )
 
 
