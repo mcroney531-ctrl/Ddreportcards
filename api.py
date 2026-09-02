@@ -204,6 +204,34 @@ def _positional_depth_chart(all_players: dict, team: str | None, position: str |
     return group[:_DEPTH_CHART_MAX]
 
 
+def _team_quarterbacks(all_players: dict, team: str | None) -> list[dict]:
+    """The QBs currently on a skill player's team, by depth chart order.
+
+    Almost every fantasy narrative about a receiver or back runs through who
+    is throwing him the ball, and nothing in the payload answered that — so
+    the model answered from training data and put Aaron Rodgers in Green Bay
+    three years after he left. The QB room is one filter away in data already
+    loaded, and shipping it means that sentence has a source instead of a
+    memory. Same reasoning as team_depth_chart: close the gap rather than ask
+    the model to remember to make another call.
+    """
+    if not team:
+        return []
+    qbs = [
+        {
+            "player_id": pid,
+            "name": p.get("full_name"),
+            "depth_chart_order": p.get("depth_chart_order"),
+            "status": p.get("status"),
+            "injury_status": p.get("injury_status"),
+        }
+        for pid, p in all_players.items()
+        if (p.get("team") or "").upper() == team.upper() and p.get("position") == "QB"
+    ]
+    qbs.sort(key=lambda x: x["depth_chart_order"] if x["depth_chart_order"] is not None else 99)
+    return qbs[:3]
+
+
 @app.get("/players/search")
 def search_players(q: str = Query(..., min_length=2)) -> dict:
     """Case-insensitive substring search across all Sleeper skill-position players.
@@ -243,6 +271,7 @@ def search_players(q: str = Query(..., min_length=2)) -> dict:
             "redraft_value": fc.get("redraftValue"),
             "trend_30day": fc.get("trend30Day"),
             "team_depth_chart": _positional_depth_chart(all_p, p.get("team"), p.get("position")),
+            "team_qbs": _team_quarterbacks(all_p, p.get("team")) if p.get("position") != "QB" else [],
         })
     matches.sort(key=_search_relevance)
     return {"results": matches[:20]}
@@ -300,6 +329,7 @@ def player_news(sleeper_id: str) -> dict:
         "depth_chart_position": meta.get("depth_chart_position"),
         "news_updated": meta.get("news_updated"),
         "team_depth_chart": _positional_depth_chart(all_p, meta.get("team"), meta.get("position")),
+        "team_qbs": _team_quarterbacks(all_p, meta.get("team")) if meta.get("position") != "QB" else [],
     }
 
 
@@ -866,6 +896,23 @@ CHAT_SYSTEM_PROMPT = (
     "13. When a verdict does move, make the move legible: what it was, what it is now, and the one "
     "thing that changed it. He should never have to guess whether you found something new or just "
     "yielded to pressure.\n"
+    "14. Specific factual claims must come from a tool result. Your judgement is the point of this "
+    "tool and he wants it — but state it as judgement, and keep it separate from fact. These have "
+    "NO source available to you, so do not assert them as fact:\n"
+    "    - Coaching staff, coordinators, or scheme. Nothing returns them.\n"
+    "    - Past-season stats, target share, snap counts, or yardage. Nothing returns them.\n"
+    "    - Where a player's value or positional rank USED to be. You get the current value and a "
+    "30-day trend, nothing older — so \"he fell from QB8 to QB20\" is invented.\n"
+    "    - What another manager wants, believes, or is trying to do. Rosters are visible; motives "
+    "are not.\n"
+    "    - Contract details, draft position, or draft-pick values.\n"
+    "  Who throws to a player IS available: every lookup returns team_qbs, his team's current QB "
+    "room. Use it and name nobody else — quarterbacks change teams, and naming one from memory is "
+    "how a receiver ends up catching passes from someone who left years ago.\n"
+    "  When something unsourceable genuinely matters to the read, mark it as yours — \"my read\", "
+    "\"I'd guess\", \"worth checking\" — or say you cannot verify it. An honest \"I don't have "
+    "his target share\" is worth more to him than a confident number you made up, because he acts "
+    "on these.\n"
 )
 
 
