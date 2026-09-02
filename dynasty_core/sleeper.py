@@ -35,6 +35,30 @@ def get_league_info(league_id: str) -> dict:
     return resp.json()
 
 
+def get_traded_picks(league_id: str) -> list[dict]:
+    """Every future draft pick that has changed hands in this league.
+
+    Sleeper only records picks that MOVED. Each entry looks like
+    {"season": "2029", "round": 2, "roster_id": 3, "previous_owner_id": 3,
+     "owner_id": 5} where roster_id is whose pick it originally is and
+    owner_id is who holds it now. A team's untraded picks appear nowhere,
+    so a full inventory means starting from "everyone owns their own" and
+    applying these as overrides.
+    """
+    resp = httpx.get(f"{BASE_URL}/league/{league_id}/traded_picks", timeout=15)
+    resp.raise_for_status()
+    return resp.json()
+
+
+def get_league_drafts(league_id: str) -> list[dict]:
+    """Draft objects for this league season, newest first. settings.rounds says
+    how many rounds the rookie draft runs, which sets how many picks a team
+    owns per future season."""
+    resp = httpx.get(f"{BASE_URL}/league/{league_id}/drafts", timeout=15)
+    resp.raise_for_status()
+    return resp.json()
+
+
 def get_league_season_chain(league_id: str) -> list[dict]:
     """Walk previous_league_id links to collect every season. Returns newest first.
 

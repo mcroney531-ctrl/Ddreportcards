@@ -12,6 +12,7 @@ Two accessor styles, both supported:
 """
 from __future__ import annotations
 
+import re
 import time
 from collections import defaultdict
 
@@ -72,6 +73,28 @@ def index_by_sleeper_id(values: list[dict]) -> dict[str, dict]:
         entry["player"]["sleeperId"]: entry
         for entry in values
         if entry.get("player", {}).get("sleeperId")
+    }
+
+
+_PICK_LABEL_RE = re.compile(r"^\d{4} (1st|2nd|3rd|4th)$")
+
+
+def index_picks_by_label(values: list[dict]) -> dict[str, dict]:
+    """FantasyCalc draft-pick entries keyed by their round-only label.
+
+    Picks come back in the same /values/current payload as players, marked
+    position "PICK" and named like "2029 2nd". index_by_sleeper_id drops them
+    because a pick has no sleeperId, so this is the other half of that split.
+
+    Round-only is as precise as it gets and as precise as is useful: Sleeper's
+    traded-pick data is also only {season, round}, since the actual slot isn't
+    known until the draft order is set.
+    """
+    return {
+        entry["player"]["name"]: entry
+        for entry in values
+        if entry.get("player", {}).get("position") == "PICK"
+        and _PICK_LABEL_RE.match(entry["player"].get("name", ""))
     }
 
 

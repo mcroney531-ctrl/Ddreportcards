@@ -44,7 +44,9 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
 import chat_guard
+import picks as picks_module
 from config.dynasty_config import LEAGUE
+from dynasty_core.fantasycalc import index_picks_by_label  # noqa: E402
 from dynasty_core.sleeper import (
     get_all_players,
     get_league_users,
@@ -429,11 +431,28 @@ def roster_data(owner: str) -> dict:
             "trend_30day": fc.get("trend30Day"),
         })
     enriched.sort(key=lambda x: x["dynasty_value"] or 0, reverse=True)
+    # Picks ship inside the roster rather than behind a second tool call.
+    # A roster is players AND picks; returning only players is how the
+    # assistant spent a whole conversation discussing a rebuild without once
+    # knowing what draft capital the rebuild actually had.
+    try:
+        pick_data = picks_module.picks_for_owner(LEAGUE_ID, owner)
+        draft_picks = None if "error" in pick_data else {
+            "pick_count": pick_data["pick_count"],
+            "own_picks": pick_data["own_picks"],
+            "picks_from_others": pick_data["picks_from_others"],
+            "total_pick_value": pick_data["total_pick_value"],
+            "picks": pick_data["picks"],
+        }
+    except Exception:  # noqa: BLE001 — a pick lookup must never break a roster read
+        draft_picks = None
+
     return {
         "owner": owner,
         "league_id": LEAGUE_ID,
         "player_count": len(enriched),
         "players": enriched,
+        "draft_picks": draft_picks,
     }
 
 
@@ -486,6 +505,24 @@ def league_rosters_summary() -> dict:
 
     teams.sort(key=lambda t: t["total_dynasty_value"], reverse=True)
     return {"teams": teams}
+
+
+@app.get("/league/picks")
+def league_picks() -> dict:
+    """Every future draft pick in the league and who currently holds it, priced
+    with FantasyCalc's generic round values. Sleeper only records picks that
+    changed hands, so this reconstructs the full board from 'everyone owns
+    their own' plus those trades."""
+    return picks_module.build_pick_inventory(LEAGUE_ID)
+
+
+@app.get("/picks/{owner}")
+def owner_picks(owner: str) -> dict:
+    """One team's draft pick inventory by Sleeper display name."""
+    result = picks_module.picks_for_owner(LEAGUE_ID, owner)
+    if "error" in result:
+        raise HTTPException(status_code=404, detail=result["error"])
+    return result
 
 
 class TradeEvaluateRequest(BaseModel):
@@ -541,7 +578,11 @@ def find_picks_in_text(text: str) -> list[str]:
 
 
 def _describe_trade_side(
-    sleeper_ids: list[str], all_players: dict, fc_index: dict, picks: list[str] | None = None
+    sleeper_ids: list[str],
+    all_players: dict,
+    fc_index: dict,
+    picks: list[str] | None = None,
+    pick_values: dict | None = None,
 ) -> dict:
     players = []
     total_value = 0
@@ -562,17 +603,27 @@ def _describe_trade_side(
             "dynasty_pos_rank": fc.get("positionRank") if fc else None,
             "unvalued": fc is None,
         })
-    described_picks = [
-        {"as_written": raw, "pick": _normalize_pick(raw) or raw, "dynasty_value": None}
-        for raw in (picks or [])
-    ]
+    described_picks = []
+    for raw in picks or []:
+        label = _normalize_pick(raw) or raw
+        fc = (pick_values or {}).get(label)
+        described_picks.append({
+            "as_written": raw,
+            "pick": label,
+            # None means "not priced", which is not the same as worthless.
+            "dynasty_value": fc["value"] if fc else None,
+        })
+    priced_picks = sum(p["dynasty_value"] for p in described_picks if p["dynasty_value"])
     return {
         "players": players,
         "total_value": total_value,
         "unknown_ids": unknown_ids,
         "picks": described_picks,
+        "pick_value": priced_picks,
+        "unpriced_picks": [p["pick"] for p in described_picks if p["dynasty_value"] is None],
         # Named so it cannot be read as the value of everything on this side.
         "player_value_only": total_value,
+        "total_value_with_picks": total_value + priced_picks,
     }
 
 
@@ -661,8 +712,10 @@ def evaluate_trade(body: TradeEvaluateRequest) -> dict:
     all_p = get_all_players()
     fc_index = index_by_sleeper_id(get_dynasty_values())
 
-    team_a = _describe_trade_side(body.team_a_sends, all_p, fc_index, body.team_a_picks)
-    team_b = _describe_trade_side(body.team_b_sends, all_p, fc_index, body.team_b_picks)
+    pick_values = index_picks_by_label(get_dynasty_values())
+
+    team_a = _describe_trade_side(body.team_a_sends, all_p, fc_index, body.team_a_picks, pick_values)
+    team_b = _describe_trade_side(body.team_b_sends, all_p, fc_index, body.team_b_picks, pick_values)
 
     a_value, b_value = team_a["total_value"], team_b["total_value"]
     net_to_a = b_value - a_value
@@ -675,45 +728,62 @@ def evaluate_trade(body: TradeEvaluateRequest) -> dict:
         for pid in side["unknown_ids"]:
             warnings.append(f"Unknown sleeper_id {pid!r} in {label} — not a tracked skill-position player")
 
-    # There is no pick-value source in this build. When a trade contains
-    # picks, the player math describes a DIFFERENT trade than the one asked
-    # about, so no fairness verdict is returned at all.
-    #
-    # This is the bug that produced "lopsided in your favor — and you're
-    # keeping three picks." The picks could not be expressed here, so the
-    # tool returned a confident verdict for the players-only trade, and the
-    # only way to reconcile that surplus with the picks in the question was
-    # to invent that they stayed. Withholding the verdict removes the thing
-    # there was to reconcile.
+    # Totals that include the picks. Picks are priced from FantasyCalc's own
+    # pick entries, so the verdict finally describes the whole trade rather
+    # than the players-only version of it — which is what produced "lopsided
+    # in your favor, and you're keeping three picks" when the picks were
+    # going out. The only way to reconcile a players-only surplus with picks
+    # in the question was to invent that they stayed.
+    a_total = team_a["total_value_with_picks"]
+    b_total = team_b["total_value_with_picks"]
+    net_total_to_a = b_total - a_total
+    bigger_total = max(a_total, b_total, 1)
+    total_delta_pct = round(abs(net_total_to_a) / bigger_total * 100, 1)
+    total_winner = "team_a" if net_total_to_a > 0 else "team_b" if net_total_to_a < 0 else None
+
     all_picks = team_a["picks"] + team_b["picks"]
+    unpriced = team_a["unpriced_picks"] + team_b["unpriced_picks"]
+
     result = {
         "team_a_sends": team_a["players"],
         "team_a_picks_sent": team_a["picks"],
         "team_a_player_value_sent": a_value,
+        "team_a_pick_value_sent": team_a["pick_value"],
+        "team_a_total_value_sent": a_total,
         "team_b_sends": team_b["players"],
         "team_b_picks_sent": team_b["picks"],
         "team_b_player_value_sent": b_value,
+        "team_b_pick_value_sent": team_b["pick_value"],
+        "team_b_total_value_sent": b_total,
         "net_player_value_to_team_a": net_to_a,
         "player_value_delta_pct": delta_pct,
+        "net_total_value_to_team_a": net_total_to_a,
+        "total_value_delta_pct": total_delta_pct,
         "direction": _trade_direction(body.team_a_sends, body.team_b_sends),
         "warnings": warnings,
     }
 
-    if all_picks:
+    if unpriced:
+        # One unpriced pick makes the total a floor, not a total. A verdict
+        # built on it would be reported as if it covered the whole trade.
         result["fairness"] = None
         result["verdict_withheld"] = (
-            "This trade includes draft picks and there is no pick-value source "
-            "in this build, so NO fairness verdict is available and none may be "
-            "implied. The value numbers above cover the players ONLY — do not "
-            "present them as the value of the trade, and do not describe either "
-            "side as winning or losing on value. State which picks each side is "
-            "sending (they are listed above), say plainly that they are not "
-            "priced, and judge the deal on the players plus his own read of what "
-            "the picks are worth."
+            f"No FantasyCalc value exists for {', '.join(unpriced)}, so the totals above are "
+            "incomplete and NO fairness verdict is available. Say which picks are unpriced, "
+            "give the values you do have, and let him weigh the rest — do not assign those "
+            "picks a value yourself, in either direction."
         )
-        result["picks_in_trade"] = [p["pick"] for p in all_picks]
     else:
-        result["fairness"] = _fairness_label(delta_pct, winner)
+        result["fairness"] = _fairness_label(total_delta_pct, total_winner)
+        if all_picks:
+            result["fairness_basis"] = (
+                "Includes pick values. These are FantasyCalc generic round values — a "
+                "league-average pick of that round and year, not this specific one. Whose "
+                "pick it is can matter more than the round; call get_pick_inventory if that "
+                "is material to the read."
+            )
+    if all_picks:
+        result["picks_in_trade"] = [p["pick"] for p in all_picks]
 
     return result
 
@@ -766,6 +836,28 @@ CHAT_TOOLS = [
                 },
             },
             "required": ["owner"],
+        },
+    },
+    {
+        "name": "get_pick_inventory",
+        "description": (
+            "Draft pick inventory: who holds which future picks in this league, priced with "
+            "FantasyCalc's generic round values. Pass owner for one team (his own display name "
+            "for his picks), omit it for the whole league. Every pick carries the team it "
+            "ORIGINATED with and that team's current standing — a 2029 2nd from the last-place "
+            "team is a very different asset from the champion's, and this league drafts in "
+            "reverse standings order. Use this for any question about draft capital, what he "
+            "has to trade, or what a pick in an offer is actually worth. Picks with "
+            "dynasty_value null are unpriced — unknown, NOT worthless."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "owner": {
+                    "type": "string",
+                    "description": "Sleeper display name. Omit for every team in the league.",
+                }
+            },
         },
     },
     {
@@ -936,6 +1028,14 @@ def _execute_chat_tool(name: str, tool_input: dict, conversation_text: str = "")
             return roster_data(owner=tool_input.get("owner", ""))
         if name == "get_league_rosters_summary":
             return league_rosters_summary()
+        if name == "get_pick_inventory":
+            owner = (tool_input.get("owner") or "").strip()
+            if owner:
+                result = picks_module.picks_for_owner(LEAGUE_ID, owner)
+                if "error" in result:
+                    return result
+                return result
+            return picks_module.build_pick_inventory(LEAGUE_ID)
         if name == "get_trending_players":
             limit = min(100, max(1, tool_input.get("limit") or 25))
             return trending_players(limit=limit)
@@ -1000,12 +1100,10 @@ CHAT_SYSTEM_PROMPT = (
     'attribution line: "Powered by LeagueLogs (leaguelogs.com)" — required by their terms.\n'
     "6. For any question about whether a trade is fair, call evaluate_trade with the sleeper_ids on "
     "each side — never estimate the value delta yourself. If the trade includes draft picks, put "
-    "them in team_a_picks/team_b_picks on the correct sides. Picks are not priced anywhere in this "
-    "build, so a trade containing them gets NO fairness verdict and you must not supply one: say "
-    "which picks each side is sending, say plainly that they are unpriced, give him the player math "
-    "labelled as players-only, and make the call on that plus his own read of the picks. Never let "
-    "a players-only number stand in for the whole trade — a surplus that ignores three outgoing "
-    "picks is not a surplus.\n"
+    "them in team_a_picks/team_b_picks on the correct sides; they are priced and counted. When "
+    "any pick comes back unpriced the verdict is withheld — say which one and why, and do not "
+    "supply a value for it in either direction. Never let a players-only number stand in for the "
+    "whole trade: a surplus that ignores three outgoing picks is not a surplus.\n"
     "7. get_player_value is a name search, not a single lookup — it can return several different "
     "real people who share a name. Results come back ordered by real-world relevance (players on an "
     "NFL roster first, then by dynasty value), so the first hit is normally the one meant. Prefer it "
@@ -1064,11 +1162,14 @@ CHAT_SYSTEM_PROMPT = (
     "30-day trend, nothing older — so \"he fell from QB8 to QB20\" is invented.\n"
     "    - What another manager wants, believes, or is trying to do. Rosters are visible; motives "
     "are not.\n"
-    "    - Contract details, or what a draft pick is worth. There is no pick-value source here, so "
-    "\"a 2029 2nd is basically worthless\" and \"your future 2nds are gold\" are equally invented. "
-    "What a pick is worth to him depends on where his team finishes and how his league trades, "
-    "which he knows and you do not — ask him rather than asserting either way, and never let your "
-    "read of a pick drift to match whichever side he is currently arguing.\n"
+    "    - Contract details. Nothing returns them.\n"
+    "    - How a team will finish in a FUTURE season. get_pick_inventory gives you a pick's origin "
+    "team and that team's standing TODAY; where that team lands in 2029 is not knowable and must "
+    "not be presented as if it were.\n"
+    "  What a pick is worth IS available now: get_pick_inventory prices every pick and names whose "
+    "it is. So \"a 2029 2nd is basically worthless\" and \"your future 2nds are gold\" are both "
+    "things to look up, not to assert — and never let your read of a pick drift to match whichever "
+    "side he is currently arguing.\n"
     "  Who throws to a player IS available: every lookup returns team_qbs, his team's current QB "
     "room. Use it and name nobody else — quarterbacks change teams, and naming one from memory is "
     "how a receiver ends up catching passes from someone who left years ago.\n"
@@ -1084,6 +1185,14 @@ CHAT_SYSTEM_PROMPT = (
     "call. Never copy a number out of your own earlier message and never reconstruct one from the "
     "shape of the conversation. Doing that is not remembering, it is inventing, and it is how the "
     "same player ends up trending -308 early in a conversation and +121 later in the same one.\n"
+    "16. Draft capital is part of a roster, not a footnote. get_roster returns draft_picks "
+    "alongside the players — read it. Never discuss a rebuild, a timeline, or what he has to "
+    "trade without knowing what picks he actually holds, and never describe someone else's "
+    "picks without calling get_pick_inventory first. When a pick matters to the read, say whose "
+    "it is: this league drafts in reverse standings order, so the last-place team's 2027 2nd is "
+    "an early second and the leader's is a late one. That is a fact about the NEXT draft only — "
+    "for seasons beyond it, give him the origin team's current standing and let him judge, "
+    "rather than projecting a finish you cannot know.\n"
 )
 
 
