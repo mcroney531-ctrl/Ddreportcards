@@ -1076,6 +1076,14 @@ CHAT_SYSTEM_PROMPT = (
     "\"I'd guess\", \"worth checking\" — or say you cannot verify it. An honest \"I don't have "
     "his target share\" is worth more to him than a confident number you made up, because he acts "
     "on these.\n"
+    "15. You start every turn with NO tool results. Lookups from earlier in this conversation are "
+    "gone — only your own replies and his carry over, and your own earlier message is not a source, "
+    "it is just text you wrote. So every number you state this turn — value, positional rank, "
+    "30-day trend, depth chart slot, roster membership — has to come from a tool result in THIS "
+    "turn. If you are restating a figure you gave three turns ago, look it up again; it costs one "
+    "call. Never copy a number out of your own earlier message and never reconstruct one from the "
+    "shape of the conversation. Doing that is not remembering, it is inventing, and it is how the "
+    "same player ends up trending -308 early in a conversation and +121 later in the same one.\n"
 )
 
 
