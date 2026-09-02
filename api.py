@@ -848,7 +848,58 @@ CHAT_SYSTEM_PROMPT = (
     "from both sides are on his roster) your split is wrong: fix it before judging. If it reports "
     "unknown, state which way you read the trade so a wrong reading is visible. Open any trade "
     "verdict by naming what he sends and what he gets, so the direction is never implied.\n"
+    "12. Hold your position until evidence moves it, not until the user pushes back. Two different "
+    "things can follow a verdict, and they get opposite responses:\n"
+    "    NEW INFORMATION — a tool result you had not fetched, a checkable fact he supplies, or a "
+    "genuine error of yours (bad arithmetic, wrong depth chart, a player you overlooked). This "
+    "SHOULD change the verdict. Fetch or verify it, then say plainly what was wrong and what it "
+    "changes.\n"
+    "    NEW FRAMING — him re-weighting factors you already knew, pressing a priority, or simply "
+    "sounding unhappy with the answer. This must NOT flip the verdict by itself. Engage the "
+    "argument seriously, say whether it changes the weighting and how much, then either hold or "
+    "name the specific evidence that would change your mind.\n"
+    "    He is asking because he wants a second opinion, not an echo. A verdict that tracks his "
+    "mood is worse than a wrong one — he cannot tell it apart from his own thinking. \"That is a "
+    "real cost, and it still does not outweigh X\" is a complete, useful answer. Never open with "
+    "\"you're absolutely right\", \"excellent point\", or \"that changes everything\" as a "
+    "reflex — earn it or skip it.\n"
+    "13. When a verdict does move, make the move legible: what it was, what it is now, and the one "
+    "thing that changed it. He should never have to guess whether you found something new or just "
+    "yielded to pressure.\n"
 )
+
+
+def _conversation_stance(messages: list) -> str:
+    """Guidance injected only once a conversation has a position to defend.
+
+    Rules 12/13 sit in the base prompt, but the failure they target is
+    turn-shaped: the model gave a verdict, the user pushed back with an
+    argument rather than a fact, and the verdict flipped — five times in one
+    conversation, with the tool numbers barely moving. On the opening turn
+    there is nothing to flip, so the reminder is noise; from the first
+    follow-up on, it is the whole ballgame. Sharpen it exactly where the
+    risk lives.
+
+    Counts real user turns only. Tool results are appended as user-role
+    messages inside the loop, so this must be computed from the incoming
+    history, before any round runs.
+    """
+    user_turns = sum(1 for m in messages if m.get("role") == "user")
+    if user_turns <= 1:
+        return ""
+    return (
+        "\n\nTHIS IS A FOLLOW-UP TURN. You already gave him a position earlier in this "
+        "conversation. Before you answer, decide which of these just happened:\n"
+        "  (a) He gave you NEW INFORMATION — a checkable fact, or he caught a real error. "
+        "Verify it with a tool if you can, then update and say exactly what changed.\n"
+        "  (b) He gave you NEW FRAMING — an argument, a priority, or displeasure about "
+        "factors already in front of you. Weigh it honestly and say how much it moves "
+        "things, but do not reverse the verdict just because he pushed.\n"
+        "If you find yourself about to write \"you're absolutely right\" or \"that changes "
+        "everything\", stop and check you are in case (a). Reversing on (b) makes you an "
+        "echo of whatever he said last, which is the one thing that makes this tool useless "
+        "to him."
+    )
 
 
 @app.post("/chat")
@@ -870,6 +921,7 @@ async def chat(request: Request) -> dict:
     system = CHAT_SYSTEM_PROMPT.format(today=today)
     if frontend_system:
         system += f"\n\n{frontend_system}"
+    system += _conversation_stance(messages)
 
     final_response = None
 
