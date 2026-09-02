@@ -42,6 +42,7 @@ from fastapi import FastAPI, HTTPException, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
+import chat_guard
 from config.dynasty_config import LEAGUE
 from dynasty_core.sleeper import (
     get_all_players,
@@ -62,9 +63,14 @@ LEAGUE_ID: str = LEAGUE["league_id"]
 
 app = FastAPI(title="Dynasty Report Cards API", version="2.0")
 
+# The read-only data endpoints stay open — they return public Sleeper and
+# FantasyCalc data and cost nothing to serve. /chat spends an Anthropic key,
+# so it is additionally gated in chat_guard, including an Origin check that
+# does not depend on the browser honouring this header.
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=chat_guard.ALLOWED_ORIGINS,
+    allow_origin_regex=chat_guard.ALLOWED_ORIGIN_REGEX,
     allow_methods=["GET", "POST"],
     allow_headers=["*"],
 )
@@ -74,7 +80,14 @@ app.add_middleware(
 
 @app.get("/health")
 def health() -> dict:
-    return {"status": "ok"}
+    """Also the warm-up ping the frontend fires on load, so it must stay cheap.
+    It reports spend and any missing control: a guard that is switched off by
+    an unset env var should be visible somewhere, not assumed to be on."""
+    return {
+        "status": "ok",
+        "chat_budget": chat_guard.budget_status(),
+        "warnings": chat_guard.config_warnings(),
+    }
 
 
 @app.get("/league")
@@ -957,12 +970,23 @@ async def chat(request: Request) -> dict:
     Runs the tool-calling loop server-side (up to 5 rounds), same as the old
     Netlify function, but without Netlify's 10s ceiling and without the extra
     HTTP hop for each tool call."""
-    body = await request.json()
+    try:
+        body = await request.json()
+    except Exception:  # noqa: BLE001 — malformed body is the caller's problem
+        raise HTTPException(status_code=400, detail="Body must be valid JSON.")
 
-    messages = list(body.get("messages") or [])
-    model = body.get("model") or "claude-sonnet-4-5"
-    max_tokens = body.get("max_tokens") or 1024
-    frontend_system = body.get("system")
+    # Rate limit, budget, origin, secret, and per-request caps. The caller no
+    # longer picks the model or the token ceiling — those set the price of the
+    # call, and this endpoint is public.
+    try:
+        params = chat_guard.enforce(request, body)
+    except chat_guard.ChatRefused as refused:
+        raise HTTPException(status_code=refused.status_code, detail=refused.detail)
+
+    messages = list(params["messages"])
+    model = params["model"]
+    max_tokens = params["max_tokens"]
+    frontend_system = params["system"]
 
     today = datetime.date.today().isoformat()
     system = CHAT_SYSTEM_PROMPT.format(today=today)
@@ -986,6 +1010,14 @@ async def chat(request: Request) -> dict:
             )
         except Exception as exc:  # noqa: BLE001 — surface as a normal error response
             return {"error": str(exc)}
+
+        # Count every round, not just the last one: a tool-heavy turn makes
+        # several full calls, and a budget that saw only the final response
+        # would undercount it by most of its actual cost.
+        usage = getattr(resp, "usage", None)
+        chat_guard.record_usage(
+            getattr(usage, "input_tokens", 0), getattr(usage, "output_tokens", 0)
+        )
 
         if resp.stop_reason != "tool_use":
             final_response = resp
