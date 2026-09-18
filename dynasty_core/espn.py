@@ -71,7 +71,66 @@ def get_event_log(espn_athlete_id: str) -> dict:
     return resp.json()
 
 
-def get_recent_game_logs(espn_athlete_id: str, limit: int = 3) -> dict:
+_WEEK_IN_REF = re.compile(r"/weeks/(\d+)")
+
+
+def _week_number(event: dict):
+    """Week number from an ESPN event, without a second request.
+
+    `week` comes back as a $ref rather than an inline {"number": n}, so
+    reading .number off it silently yielded nothing. The number is already in
+    the ref's URL (.../types/2/weeks/3/...), so pull it from there rather than
+    spend another round trip per game on a single integer.
+    """
+    week = event.get("week")
+    if isinstance(week, dict):
+        if isinstance(week.get("number"), int):
+            return week["number"]
+        m = _WEEK_IN_REF.search(week.get("$ref") or "")
+        if m:
+            return int(m.group(1))
+    return None
+
+
+# Stats kept even when zero, because at zero they are the story: a receiver
+# who was not targeted is a fact worth stating, where a receiver with no
+# passing yards is just a receiver. Scoped by position so the zero-keeping
+# does not drag a quarterback's stat line onto a wideout.
+_RECEIVING_CORE = {"receptions", "receivingTargets", "receivingYards", "receivingTouchdowns"}
+_RUSHING_CORE = {"rushingAttempts", "rushingYards", "rushingTouchdowns"}
+_PASSING_CORE = {"passingAttempts", "completions", "passingYards", "passingTouchdowns", "interceptions"}
+_ALWAYS_CORE = {"gamesPlayed", "fumblesLost"}
+
+_CORE_BY_POSITION = {
+    "QB": _PASSING_CORE | _RUSHING_CORE | _ALWAYS_CORE,
+    "RB": _RUSHING_CORE | _RECEIVING_CORE | _ALWAYS_CORE,
+    "WR": _RECEIVING_CORE | _ALWAYS_CORE,
+    "TE": _RECEIVING_CORE | _ALWAYS_CORE,
+}
+_CORE_ANY_POSITION = _RECEIVING_CORE | _RUSHING_CORE | _PASSING_CORE | _ALWAYS_CORE
+
+
+def fantasy_relevant_stats(flat: dict, position: str | None = None) -> dict:
+    """Drop the fields ESPN returns at zero for every player regardless of position.
+
+    A receiver's game line comes back with QBRating, fieldGoals, kickExtraPoints,
+    stuffs and twoPtRush all sitting at 0 — about ninety fields, of which a
+    handful carry the game. Sending all of it to a model costs tokens against
+    the daily budget and buries the six receptions that matter.
+
+    Anything non-zero is kept whatever it is, so ESPN's less obvious columns —
+    yards per route run, average depth of target — survive when they have a
+    value.
+    """
+    core = _CORE_BY_POSITION.get((position or "").upper(), _CORE_ANY_POSITION)
+    out = {}
+    for name, value in (flat or {}).items():
+        if name in core or (value not in (0, 0.0, None, "")):
+            out[name] = value
+    return out
+
+
+def get_recent_game_logs(espn_athlete_id: str, limit: int = 3, position: str | None = None) -> dict:
     """Per-game stat lines for a player's most recent games, newest first.
 
     get_season_statistics gives season-to-date TOTALS, which cannot answer
@@ -104,7 +163,9 @@ def get_recent_game_logs(espn_athlete_id: str, limit: int = 3) -> dict:
         stats_ref = (item.get("statistics") or {}).get("$ref")
         if stats_ref:
             try:
-                entry["stats"] = flatten_statistics(get_injury_detail(stats_ref))
+                entry["stats"] = fantasy_relevant_stats(
+                    flatten_statistics(get_injury_detail(stats_ref)), position
+                )
             except Exception:  # noqa: BLE001 — skip a game rather than lose them all
                 continue
         # Date and opponent are a nice-to-have: one extra fetch per game, and
@@ -115,7 +176,7 @@ def get_recent_game_logs(espn_athlete_id: str, limit: int = 3) -> dict:
                 ev = get_injury_detail(event_ref)
                 entry["date"] = ev.get("date")
                 entry["game"] = ev.get("shortName") or ev.get("name")
-                entry["week"] = (ev.get("week") or {}).get("number")
+                entry["week"] = _week_number(ev)
             except Exception:  # noqa: BLE001
                 pass
         if entry:

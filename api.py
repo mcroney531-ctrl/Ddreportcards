@@ -64,6 +64,7 @@ from dynasty_core.espn import (
     get_recent_game_logs,
     get_season_statistics,
     flatten_statistics,
+    fantasy_relevant_stats,
 )
 from dynasty_core.leaguelogs import ATTRIBUTION_HTML, get_espn_id, get_player_blurb
 
@@ -488,12 +489,15 @@ def player_stats(sleeper_id: str, games: int = Query(default=3, ge=1, le=6)) -> 
         return out
 
     try:
-        season_stats = flatten_statistics(get_season_statistics(espn_id, season))
+        season_stats = fantasy_relevant_stats(
+            flatten_statistics(get_season_statistics(espn_id, season)),
+            meta.get("position"),
+        )
     except Exception as exc:  # noqa: BLE001 — stats are additive, never fatal
         season_stats = {}
         out["season_error"] = str(exc)[:200]
     try:
-        recent = get_recent_game_logs(espn_id, limit=games)
+        recent = get_recent_game_logs(espn_id, limit=games, position=meta.get("position"))
     except Exception as exc:  # noqa: BLE001
         recent = {"games": [], "games_played": 0, "games_missed": 0, "available": False}
         out["games_error"] = str(exc)[:200]
