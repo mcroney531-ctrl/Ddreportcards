@@ -1547,21 +1547,30 @@ async def chat(request: Request) -> dict:
 # harmless — each thread creates its own event loop, no collision.
 
 @app.post("/report/player/{sleeper_id}")
-async def report_player(sleeper_id: str) -> dict:
+async def report_player(sleeper_id: str, request: Request) -> dict:
     """Full per-player pipeline: situation + production + market + synthesis agents.
     Returns a complete player card. Typically 20–60 s per player."""
+    try:
+        chat_guard.enforce_report(request)
+    except chat_guard.ChatRefused as refused:
+        raise HTTPException(status_code=refused.status_code, detail=refused.detail)
     from agents.synthesis_agent import run_synthesis_agent
     return await run_synthesis_agent(sleeper_id)
 
 
 @app.post("/report/roster/{owner}")
-async def report_roster(owner: str) -> dict:
+async def report_roster(owner: str, request: Request) -> dict:
     """Full roster pipeline: synthesis agent for every skill-position player, then
     roster_agent for the overall grade.
 
     Synthesis calls run concurrently (capped at 4 at a time to stay within
     Anthropic rate limits). Typically 2–5 minutes for a 24-player roster.
     """
+    try:
+        chat_guard.enforce_report(request)
+    except chat_guard.ChatRefused as refused:
+        raise HTTPException(status_code=refused.status_code, detail=refused.detail)
+
     from agents.synthesis_agent import run_synthesis_agent
     from agents.roster_agent import run_roster_agent
 

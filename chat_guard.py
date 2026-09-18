@@ -105,21 +105,38 @@ def client_ip(request) -> str:
     return getattr(getattr(request, "client", None), "host", None) or "unknown"
 
 
-def check_rate_limit(ip: str, now: float | None = None) -> None:
+def check_rate_limit(
+    ip: str,
+    now: float | None = None,
+    bucket: str = "chat",
+    limit: int | None = None,
+    window: int | None = None,
+) -> None:
+    """Sliding-window limit, per IP and per bucket.
+
+    Buckets are separate because the endpoints are not the same size. A chat
+    turn is a handful of model calls; a roster report is the whole agent
+    pipeline run once per player on a 24-man roster, several minutes of
+    billed work for one request. Sharing one allowance would let the
+    expensive endpoint hide inside the cheap one's budget.
+    """
     now = time.time() if now is None else now
-    cutoff = now - RATE_LIMIT_WINDOW_SECONDS
+    limit = RATE_LIMIT_REQUESTS if limit is None else limit
+    window = RATE_LIMIT_WINDOW_SECONDS if window is None else window
+    key = f"{bucket}:{ip}"
+    cutoff = now - window
     with _lock:
-        recent = [t for t in _hits.get(ip, []) if t > cutoff]
-        if len(recent) >= RATE_LIMIT_REQUESTS:
-            retry_in = int(recent[0] + RATE_LIMIT_WINDOW_SECONDS - now) + 1
-            _hits[ip] = recent
+        recent = [t for t in _hits.get(key, []) if t > cutoff]
+        if len(recent) >= limit:
+            retry_in = int(recent[0] + window - now) + 1
+            _hits[key] = recent
             raise ChatRefused(
                 429,
-                f"Rate limit: {RATE_LIMIT_REQUESTS} requests per "
-                f"{RATE_LIMIT_WINDOW_SECONDS // 60} minutes. Try again in {retry_in}s.",
+                f"Rate limit: {limit} requests per "
+                f"{max(1, window // 60)} minutes. Try again in {retry_in}s.",
             )
         recent.append(now)
-        _hits[ip] = recent
+        _hits[key] = recent
         # Opportunistic sweep so the dict cannot grow without bound.
         if len(_hits) > 2000:
             for k in [k for k, v in _hits.items() if not any(t > cutoff for t in v)]:
@@ -248,6 +265,37 @@ def enforce(request, body: dict) -> dict:
     check_rate_limit(client_ip(request))
     check_budget()
     return sanitize_body(body)
+
+
+REPORT_RATE_LIMIT_REQUESTS = _int_env("GM_REPORT_RATE_REQUESTS", 4)
+REPORT_RATE_WINDOW_SECONDS = _int_env("GM_REPORT_RATE_WINDOW", 3600)
+
+
+def enforce_report(request) -> None:
+    """Gate for the agent-pipeline endpoints.
+
+    These were left open when /chat was locked down, and they are the more
+    expensive pair by a wide margin: /report/roster runs the synthesis
+    pipeline once for every skill player on a roster — roughly two dozen
+    multi-agent runs, minutes of billed work — from one unauthenticated POST
+    on a guessable URL. There is no body to sanitize here, so no model or
+    token ceiling applies; the protection is who may call, how often, and
+    whether the day's budget is already spent.
+
+    Caveat worth knowing: the agents call Anthropic through LiteLLM and
+    their usage is not reported back here, so this reads the budget without
+    adding to it. The check still stops reports once chat has spent the day,
+    but report spend itself is not yet counted.
+    """
+    check_secret(request)
+    check_origin(request)
+    check_rate_limit(
+        client_ip(request),
+        bucket="report",
+        limit=REPORT_RATE_LIMIT_REQUESTS,
+        window=REPORT_RATE_WINDOW_SECONDS,
+    )
+    check_budget()
 
 
 def config_warnings() -> list[str]:
