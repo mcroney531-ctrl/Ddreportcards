@@ -39,14 +39,17 @@ def _int_env(name: str, default: int) -> int:
         return default
 
 
-# Frontend asks for claude-sonnet-4-5. Anything outside this list is refused
+# Frontend asks for claude-sonnet-5. Anything outside this list is refused
 # rather than silently downgraded — a caller asking for a model we won't run
 # should be told, not quietly served something else.
+# claude-sonnet-4-5 stays listed through the rollout: this is a PWA, so a
+# browser holding a cached index.html keeps asking for it, and dropping it
+# here would 400 those clients until they picked up the new page.
 ALLOWED_MODELS = {
     m.strip()
     for m in (
         os.environ.get("GM_CHAT_ALLOWED_MODELS")
-        or "claude-sonnet-4-5,claude-haiku-4-5-20251001"
+        or "claude-sonnet-5,claude-haiku-4-5,claude-sonnet-4-5"
     ).split(",")
     if m.strip()
 }
@@ -215,7 +218,7 @@ def sanitize_body(body: dict) -> dict:
     if size > MAX_BODY_CHARS:
         raise ChatRefused(413, f"Request too large: {size} chars, limit {MAX_BODY_CHARS}.")
 
-    model = body.get("model") or "claude-sonnet-4-5"
+    model = body.get("model") or "claude-sonnet-5"
     if model not in ALLOWED_MODELS:
         raise ChatRefused(
             400,
