@@ -30,6 +30,8 @@ from google.adk.runners import Runner
 from google.adk.sessions import InMemorySessionService
 from google.genai import types as genai_types
 
+from agents.usage import record_model_usage
+
 from agents.roster_agent import _quality_score, CONTRIBUTOR_THRESHOLD
 
 # Thresholds for each signal type.
@@ -149,6 +151,7 @@ If flagged_players is empty, return sell_candidates: [] and say so plainly in su
 def build_trade_agent() -> LlmAgent:
     return LlmAgent(
         model=LiteLlm(model="anthropic/claude-sonnet-4-6", api_key=os.getenv("ANTHROPIC_API_KEY")),
+        after_model_callback=record_model_usage,
         name="trade_agent",
         instruction=SYSTEM_PROMPT,
         tools=[detect_sell_signals],

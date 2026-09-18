@@ -282,10 +282,9 @@ def enforce_report(request) -> None:
     token ceiling applies; the protection is who may call, how often, and
     whether the day's budget is already spent.
 
-    Caveat worth knowing: the agents call Anthropic through LiteLLM and
-    their usage is not reported back here, so this reads the budget without
-    adding to it. The check still stops reports once chat has spent the day,
-    but report spend itself is not yet counted.
+    Agent spend counts toward the same budget: each agent registers
+    agents.usage.record_model_usage as ADK's after_model_callback, so every
+    LiteLLM call reports its tokens here the way the chat loop does.
     """
     check_secret(request)
     check_origin(request)

@@ -22,6 +22,8 @@ from google.adk.runners import Runner
 from google.adk.sessions import InMemorySessionService
 from google.genai import types as genai_types
 
+from agents.usage import record_model_usage
+
 from data import sleeper_client, espn_client, fantasycalc_client, leaguelogs_client
 
 # ── Age-curve calibration (position-specific dynasty decline windows) ─────────
@@ -294,6 +296,7 @@ Output format — always return a JSON object with these exact keys:
 def build_production_agent() -> LlmAgent:
     return LlmAgent(
         model=LiteLlm(model="anthropic/claude-sonnet-4-6", api_key=os.getenv("ANTHROPIC_API_KEY")),
+        after_model_callback=record_model_usage,
         name="production_agent",
         instruction=SYSTEM_PROMPT,
         tools=[
