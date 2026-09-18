@@ -116,6 +116,35 @@ def trending_players(limit: int = Query(default=25, ge=1, le=100)) -> dict:
     return {"trending_adds": result}
 
 
+_league_roster_cache: tuple[float, dict[str, str]] | None = None
+_LEAGUE_ROSTER_TTL_SECONDS = 5 * 60
+
+
+def _league_rostered_owners() -> dict[str, str]:
+    """player_id -> the display name of whoever rosters him in this league.
+
+    A name is only ambiguous if nothing else identifies the player. When
+    somebody in the league owns a player by that name, his player_id is a
+    settled fact and there is nothing left to guess — which is the whole
+    problem with resolving a roster player by name search.
+    """
+    global _league_roster_cache
+    now = time.time()
+    if _league_roster_cache and (now - _league_roster_cache[0]) < _LEAGUE_ROSTER_TTL_SECONDS:
+        return _league_roster_cache[1]
+    try:
+        users = {u["user_id"]: u.get("display_name") for u in get_league_users(LEAGUE_ID)}
+        index: dict[str, str] = {}
+        for roster in get_league_rosters(LEAGUE_ID):
+            owner = users.get(roster.get("owner_id")) or f"roster {roster.get('roster_id')}"
+            for pid in roster.get("players") or []:
+                index[pid] = owner
+    except Exception:  # noqa: BLE001 — identity hinting must never break a lookup
+        return _league_roster_cache[1] if _league_roster_cache else {}
+    _league_roster_cache = (now, index)
+    return index
+
+
 def _search_relevance(entry: dict) -> tuple:
     """Rank name-search hits by real-world relevance, most relevant first.
 
@@ -139,6 +168,12 @@ def _search_relevance(entry: dict) -> tuple:
          irrelevant players. Missing is treated as least relevant, so this
          degrades safely if the field ever disappears.
     """
+    # Rostered in THIS league beats every heuristic below it. Those are
+    # guesses about who is more relevant in general; this is knowing which
+    # player the conversation is actually about.
+    if entry.get("rostered_by"):
+        return (-1, -(entry.get("dynasty_value") or 0), 0)
+
     has_team = bool(entry.get("team"))
     value = entry.get("dynasty_value") or 0
     has_value = value > 0
@@ -260,6 +295,7 @@ def search_players(q: str = Query(..., min_length=2)) -> dict:
     all_p = get_all_players()
     fc_values = get_dynasty_values()
     fc_index = index_by_sleeper_id(fc_values)
+    rostered = _league_rostered_owners()
     q_lower = q.lower()
     matches = []
     for pid, p in all_p.items():
@@ -288,9 +324,23 @@ def search_players(q: str = Query(..., min_length=2)) -> dict:
             "trend_30day": fc.get("trend30Day"),
             "team_depth_chart": _positional_depth_chart(all_p, p.get("team"), p.get("position")),
             "team_qbs": _team_quarterbacks(all_p, p.get("team")) if p.get("position") != "QB" else [],
+            "rostered_by": rostered.get(pid),
         })
     matches.sort(key=_search_relevance)
-    return {"results": matches[:20]}
+
+    result = {"results": matches[:20]}
+    owned = [m for m in matches if m.get("rostered_by")]
+    if len(owned) == 1:
+        # Say it outright rather than leaving it to be inferred from sort
+        # order. A player somebody in the league rosters is the player being
+        # discussed; asking the user to pick between him and a namesake
+        # nobody owns is not caution, it is discarding the answer.
+        result["identity_resolved"] = (
+            f"{owned[0]['name']} ({owned[0]['player_id']}) is rostered by "
+            f"{owned[0]['rostered_by']} in this league, so this is the player meant. "
+            "Do not ask which one; use this player_id."
+        )
+    return result
 
 
 @app.get("/players/{sleeper_id}")
@@ -1105,8 +1155,11 @@ CHAT_SYSTEM_PROMPT = (
     "supply a value for it in either direction. Never let a players-only number stand in for the "
     "whole trade: a surplus that ignores three outgoing picks is not a surplus.\n"
     "7. get_player_value is a name search, not a single lookup — it can return several different "
-    "real people who share a name. Results come back ordered by real-world relevance (players on an "
-    "NFL roster first, then by dynasty value), so the first hit is normally the one meant. Prefer it "
+    "real people who share a name. If the result carries identity_resolved, the question is already "
+    "settled: somebody in this league rosters that player, so that is the one meant — use the "
+    "player_id and never ask him which player he means. Otherwise results come back ordered by "
+    "real-world relevance (rostered in this league first, then players on an "
+    "NFL roster, then by dynasty value), so the first hit is normally the one meant. Prefer it "
     "unless something in the question points elsewhere — a stated team, position, or draft context. "
     "A player whose team is null is unsigned and not playing this season: never lead with one of "
     "those over a rostered player of the same name, and don't present an unsigned player as a real "
@@ -1193,6 +1246,15 @@ CHAT_SYSTEM_PROMPT = (
     "an early second and the leader's is a late one. That is a fact about the NEXT draft only — "
     "for seasons beyond it, give him the origin team's current standing and let him judge, "
     "rather than projecting a finish you cannot know.\n"
+    "17. The context block the app prepends about players he named is a STARTING POINT, not a "
+    "source. It is resolved from a cached player dictionary that may be hours old, so its team, "
+    "depth chart and injury fields can be stale — a live lookup overrides them every time. Its "
+    "player_ids ARE reliable; use them instead of searching the name again. Two things never "
+    "follow from that block alone: that a player is a free agent, and that you are unsure who he "
+    "means. If a player sits on a roster in this league, his identity is a settled fact — say what "
+    "you know about him and flag anything you could not verify, rather than stopping to ask him "
+    "which player he meant. He knows who is on his own team; being asked is worse than useless "
+    "to him.\n"
 )
 
 
