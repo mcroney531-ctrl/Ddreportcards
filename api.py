@@ -60,7 +60,12 @@ from dynasty_core.fantasycalc import (
     index_by_sleeper_id,
     get_value_for_sleeper_id,
 )
-from dynasty_core.leaguelogs import ATTRIBUTION_HTML, get_player_blurb
+from dynasty_core.espn import (
+    get_recent_game_logs,
+    get_season_statistics,
+    flatten_statistics,
+)
+from dynasty_core.leaguelogs import ATTRIBUTION_HTML, get_espn_id, get_player_blurb
 
 LEAGUE_ID: str = LEAGUE["league_id"]
 
@@ -412,6 +417,99 @@ def player_blurb(sleeper_id: str) -> dict:
         "signals": result.get("signals", []) if result else [],
         "attribution_html": ATTRIBUTION_HTML,
     }
+
+
+def _current_nfl_season() -> int:
+    """The season now in progress, or the last one if we're before kickoff.
+    An NFL season is named for the calendar year it starts in."""
+    today = datetime.date.today()
+    return today.year if today.month >= 9 else today.year - 1
+
+
+def _espn_athlete_id(sleeper_id: str, meta: dict | None = None) -> str | None:
+    """Sleeper -> ESPN athlete id, through three sources.
+
+    Sleeper's espn_id is null for a lot of recent rookies — exactly the
+    players a dynasty manager asks about — so FantasyCalc and LeagueLogs
+    each get a turn. All three coming back empty is a real "no ESPN data"
+    case, not an error.
+    """
+    if meta is None:
+        meta = get_all_players().get(sleeper_id) or {}
+    espn_id = meta.get("espn_id")
+    if not espn_id:
+        try:
+            fc = get_value_for_sleeper_id(sleeper_id)
+            espn_id = (fc.get("player") or {}).get("espnId") if fc else None
+        except Exception:  # noqa: BLE001
+            espn_id = None
+    if not espn_id:
+        try:
+            espn_id = get_espn_id(sleeper_id)
+        except Exception:  # noqa: BLE001
+            espn_id = None
+    # A missing id has reached ESPN as the literal string "null" before and
+    # come back a 400 instead of a clean empty result.
+    if not espn_id or str(espn_id).lower() in ("null", "none"):
+        return None
+    return str(espn_id)
+
+
+@app.get("/players/{sleeper_id}/stats")
+def player_stats(sleeper_id: str, games: int = Query(default=3, ge=1, le=6)) -> dict:
+    """On-field production: season-to-date totals plus the last few game lines.
+
+    Nothing in this build could see a snap count. Values and trends said a
+    player was rising; they could not say he caught 6 for 88, or that he has
+    not played. So every performance claim came from somewhere other than
+    data, and a manager asking "how did he look last week" got a hedge.
+    """
+    meta = get_all_players().get(sleeper_id)
+    if not meta:
+        raise HTTPException(status_code=404, detail=f"No player with id {sleeper_id!r}")
+
+    espn_id = _espn_athlete_id(sleeper_id, meta)
+    season = _current_nfl_season()
+    out = {
+        "player_id": sleeper_id,
+        "name": meta.get("full_name"),
+        "position": meta.get("position"),
+        "team": meta.get("team"),
+        "season": season,
+        "espn_id": espn_id,
+    }
+    if not espn_id:
+        out["available"] = False
+        out["note"] = (
+            "No ESPN athlete id on file from Sleeper, FantasyCalc or LeagueLogs, so no "
+            "stats are available for this player. Say that plainly — do not substitute "
+            "an impression of how he has played."
+        )
+        return out
+
+    try:
+        season_stats = flatten_statistics(get_season_statistics(espn_id, season))
+    except Exception as exc:  # noqa: BLE001 — stats are additive, never fatal
+        season_stats = {}
+        out["season_error"] = str(exc)[:200]
+    try:
+        recent = get_recent_game_logs(espn_id, limit=games)
+    except Exception as exc:  # noqa: BLE001
+        recent = {"games": [], "games_played": 0, "games_missed": 0, "available": False}
+        out["games_error"] = str(exc)[:200]
+
+    out["season_totals"] = season_stats
+    out["recent_games"] = recent["games"]
+    out["games_played"] = recent["games_played"]
+    out["games_missed"] = recent["games_missed"]
+    out["available"] = bool(season_stats or recent["games"])
+    if not out["available"]:
+        out["note"] = (
+            f"ESPN has no {season} stats on file for this player — most likely he has not "
+            "played a regular-season snap this year. That is itself the answer; do not "
+            "describe production he does not have."
+        )
+    return out
 
 
 @app.get("/teams/{team}/roster")
@@ -988,6 +1086,34 @@ CHAT_TOOLS = [
         },
     },
     {
+        "name": "get_player_stats",
+        "description": (
+            "On-field production for a player: this season's totals so far, his last few "
+            "game lines (receptions, yards, touchdowns, carries, targets where ESPN has them), "
+            "and how many games he has played versus missed. This is the ONLY source of "
+            "performance data in this toolset — dynasty value and 30-day trend tell you what "
+            "the market thinks, not what he did on the field. Call it for any claim about how "
+            "a player has played, looked, or produced, and for 'did he do anything last week'. "
+            "available:false with a note means there is genuinely nothing on file — usually he "
+            "has not played — and that is the answer, not a reason to estimate. "
+            "Requires the Sleeper player_id from get_player_value."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "sleeper_id": {
+                    "type": "string",
+                    "description": "Sleeper player ID (the player_id field from get_player_value results)",
+                },
+                "games": {
+                    "type": "integer",
+                    "description": "How many recent games to return, 1-6. Default 3.",
+                },
+            },
+            "required": ["sleeper_id"],
+        },
+    },
+    {
         "name": "get_player_blurb",
         "description": (
             "Get a short LLM-written narrative blurb about a player from LeagueLogs — context on "
@@ -1095,6 +1221,12 @@ def _execute_chat_tool(name: str, tool_input: dict, conversation_text: str = "")
             return team_roster(team=(tool_input.get("team") or "").upper())
         if name == "get_player_news":
             return player_news(sleeper_id=tool_input.get("sleeper_id", ""))
+        if name == "get_player_stats":
+            games = tool_input.get("games") or 3
+            return player_stats(
+                sleeper_id=tool_input.get("sleeper_id", ""),
+                games=min(6, max(1, int(games))),
+            )
         if name == "get_player_blurb":
             return player_blurb(sleeper_id=tool_input.get("sleeper_id", ""))
         if name == "evaluate_trade":
@@ -1144,7 +1276,11 @@ CHAT_SYSTEM_PROMPT = (
     "team_depth_chart; if a name you were about to use isn't there, he has been traded or cut — leave "
     "him out. Call get_team_roster when you need a team's full group across positions. Players move "
     "every offseason and your training data will name the wrong ones.\n"
-    "3. Call get_player_news for any player whose current depth chart position, injury, or team membership is central to the answer.\n"
+    "3. Call get_player_news for any player whose current depth chart position, injury, or team "
+    "membership is central to the answer. For how he has actually PLAYED, that is a different "
+    "tool: get_player_stats. Value and 30-day trend are the market's opinion, not production — "
+    "a player can be trending up on hype and have caught two balls. Never infer a performance "
+    "from a trend, and never answer \"how did he look last week\" from anything else.\n"
     "4. If a player's team in tool results is null or missing, they are a free agent or out of the league — do not claim they compete with anyone.\n"
     "5. If you use a non-null blurb from get_player_blurb, end your response with a short plain-text "
     'attribution line: "Powered by LeagueLogs (leaguelogs.com)" — required by their terms.\n'
@@ -1210,7 +1346,9 @@ CHAT_SYSTEM_PROMPT = (
     "tool and he wants it — but state it as judgement, and keep it separate from fact. These have "
     "NO source available to you, so do not assert them as fact:\n"
     "    - Coaching staff, coordinators, or scheme. Nothing returns them.\n"
-    "    - Past-season stats, target share, snap counts, or yardage. Nothing returns them.\n"
+    "    - Snap counts and target share specifically. get_player_stats returns receptions, "
+    "targets, yards, touchdowns and carries where ESPN has them, but not snap or route "
+    "participation — so cite what it gives you and do not convert it into a usage rate.\n"
     "    - Where a player's value or positional rank USED to be. You get the current value and a "
     "30-day trend, nothing older — so \"he fell from QB8 to QB20\" is invented.\n"
     "    - What another manager wants, believes, or is trying to do. Rosters are visible; motives "
@@ -1255,6 +1393,14 @@ CHAT_SYSTEM_PROMPT = (
     "you know about him and flag anything you could not verify, rather than stopping to ask him "
     "which player he meant. He knows who is on his own team; being asked is worse than useless "
     "to him.\n"
+    "18. In season, recent production is usually the most decision-relevant thing you can get, "
+    "and it is the thing he has already watched. When he says a player looked good, had a big "
+    "week, or is buzzing, call get_player_stats before responding — either it backs him up, in "
+    "which case say so with the line, or it does not, which is worth far more to him than "
+    "agreement. Quote actual numbers with the week they came from. Two limits to respect: the "
+    "tool covers the current season only, so anything about last year has no source; and "
+    "available:false means nothing is on file, which for a player who has not taken a snap is "
+    "the answer rather than a gap to fill with an impression.\n"
 )
 
 

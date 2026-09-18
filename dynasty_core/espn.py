@@ -71,6 +71,65 @@ def get_event_log(espn_athlete_id: str) -> dict:
     return resp.json()
 
 
+def get_recent_game_logs(espn_athlete_id: str, limit: int = 3) -> dict:
+    """Per-game stat lines for a player's most recent games, newest first.
+
+    get_season_statistics gives season-to-date TOTALS, which cannot answer
+    "what did he do last week" — the question that actually moves a dynasty
+    read in-season. The eventlog carries one entry per game with a `played`
+    flag and a $ref to that game's stat line; this dereferences the tail of
+    it.
+
+    Cost is one fetch for the log plus one per game returned, so `limit`
+    stays small. Games the player missed are counted but not dereferenced —
+    there is nothing to fetch and the absence is itself the signal.
+
+    ESPN returns eventlog items oldest-first, so the most recent games are
+    the tail. Results are re-sorted by date where a date comes back, so a
+    change in ESPN's ordering degrades to "right games, maybe wrong order"
+    rather than silently returning week 1 as the latest game.
+    """
+    try:
+        log = get_event_log(espn_athlete_id)
+    except Exception:  # noqa: BLE001 — no log is a legitimate "no data" case
+        return {"games": [], "games_played": 0, "games_missed": 0, "available": False}
+
+    items = (log.get("events") or {}).get("items") or []
+    played = [i for i in items if i.get("played")]
+    missed = len(items) - len(played)
+
+    games = []
+    for item in played[-max(1, limit):]:
+        entry: dict = {}
+        stats_ref = (item.get("statistics") or {}).get("$ref")
+        if stats_ref:
+            try:
+                entry["stats"] = flatten_statistics(get_injury_detail(stats_ref))
+            except Exception:  # noqa: BLE001 — skip a game rather than lose them all
+                continue
+        # Date and opponent are a nice-to-have: one extra fetch per game, and
+        # a stat line without them is still worth returning.
+        event_ref = (item.get("event") or {}).get("$ref")
+        if event_ref:
+            try:
+                ev = get_injury_detail(event_ref)
+                entry["date"] = ev.get("date")
+                entry["game"] = ev.get("shortName") or ev.get("name")
+                entry["week"] = (ev.get("week") or {}).get("number")
+            except Exception:  # noqa: BLE001
+                pass
+        if entry:
+            games.append(entry)
+
+    games.sort(key=lambda g: g.get("date") or "", reverse=True)
+    return {
+        "games": games,
+        "games_played": len(played),
+        "games_missed": missed,
+        "available": bool(games),
+    }
+
+
 def flatten_statistics(stats_response: dict) -> dict[str, float]:
     """Flatten ESPN's nested category/stat structure into {stat_name: value}."""
     flat: dict[str, float] = {}
