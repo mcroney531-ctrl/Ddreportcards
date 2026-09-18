@@ -39,10 +39,19 @@ GRADE_TIERS: dict[str, list[tuple[int, str]]] = {
     "TE": [(6,  "A"), (12, "B"), (18, "C"), (24, "D")],
 }
 
-_values_cache: list[dict] | None = None
-_values_cache_time: float = 0.0
+# Keyed by the request parameters, not shared across them. A single global
+# cache meant the first caller's league settings were served to every caller
+# afterwards: ask for redraft values or a 1QB league inside the TTL and you
+# got the superflex dynasty list back, silently and with no way to tell. No
+# caller passes non-defaults today, which is exactly why it would have been
+# found late — by a wrong answer rather than an error.
+_values_cache: dict[tuple, tuple[float, list[dict]]] = {}
 _VALUES_TTL_SECONDS = 6 * 60 * 60
 _index_cache: dict[str, dict] | None = None  # condensed index; invalidated with values cache
+
+
+def _default_params_key() -> tuple:
+    return (True, _DEFAULT_NUM_QBS, _DEFAULT_NUM_TEAMS, _DEFAULT_PPR)
 
 
 def get_dynasty_values(
@@ -51,20 +60,29 @@ def get_dynasty_values(
     num_teams: int = _DEFAULT_NUM_TEAMS,
     ppr: float = _DEFAULT_PPR,
 ) -> list[dict]:
-    """Full league-wide value list from FantasyCalc. Cached 6 h in-process."""
-    global _values_cache, _values_cache_time, _index_cache
+    """Full league-wide value list from FantasyCalc. Cached 6 h per parameter set."""
+    global _index_cache
+    key = (bool(is_dynasty), int(num_qbs), int(num_teams), float(ppr))
     now = time.time()
-    if _values_cache is None or (now - _values_cache_time) > _VALUES_TTL_SECONDS:
-        resp = httpx.get(
-            BASE_URL,
-            params={"isDynasty": str(is_dynasty).lower(), "numQbs": num_qbs, "numTeams": num_teams, "ppr": ppr},
-            timeout=20,
-        )
-        resp.raise_for_status()
-        _values_cache = resp.json()
-        _values_cache_time = now
+
+    hit = _values_cache.get(key)
+    if hit is not None and (now - hit[0]) <= _VALUES_TTL_SECONDS:
+        return hit[1]
+
+    resp = httpx.get(
+        BASE_URL,
+        params={"isDynasty": str(is_dynasty).lower(), "numQbs": num_qbs, "numTeams": num_teams, "ppr": ppr},
+        timeout=20,
+    )
+    resp.raise_for_status()
+    values = resp.json()
+    _values_cache[key] = (now, values)
+
+    # The condensed index is built from the default parameters only, so it is
+    # stale exactly when that entry is refetched — and unaffected by any other.
+    if key == _default_params_key():
         _index_cache = None
-    return _values_cache
+    return values
 
 
 def index_by_sleeper_id(values: list[dict]) -> dict[str, dict]:
