@@ -60,8 +60,18 @@ ALLOWED_MODELS = {
 # mid-thought returns no text block at all. This is a cap, not a reservation:
 # raising it costs nothing on a reply that does not need the room.
 MAX_TOKENS_CEILING = _int_env("GM_CHAT_MAX_TOKENS", 16000)
-MAX_MESSAGES = _int_env("GM_CHAT_MAX_MESSAGES", 60)
-MAX_BODY_CHARS = _int_env("GM_CHAT_MAX_BODY_CHARS", 120_000)
+# Both counts include assistant turns, so 60 messages was really 30 exchanges
+# — short enough that a normal trade conversation hit it. Sized now against
+# Sonnet 5's 1M context rather than against caution: 600k chars is roughly
+# 150k tokens, which leaves the model's whole context free for the system
+# prompt, eleven tool definitions, and the tool results the loop appends
+# mid-turn (a league rosters summary or a full pick inventory is not small).
+#
+# These bound one REQUEST. What bounds spend is the daily token budget below,
+# which is the right place for it: history is resent every turn, so a long
+# conversation gets expensive per message whatever these are set to.
+MAX_MESSAGES = _int_env("GM_CHAT_MAX_MESSAGES", 500)
+MAX_BODY_CHARS = _int_env("GM_CHAT_MAX_BODY_CHARS", 600_000)
 
 RATE_LIMIT_REQUESTS = _int_env("GM_CHAT_RATE_REQUESTS", 20)
 RATE_LIMIT_WINDOW_SECONDS = _int_env("GM_CHAT_RATE_WINDOW", 300)
