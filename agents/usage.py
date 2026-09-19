@@ -24,20 +24,32 @@ counter, which nothing reads.
 """
 
 try:
-    import chat_guard
+    import budget
 except Exception:  # noqa: BLE001 — agents must stay runnable without the API
-    chat_guard = None
+    budget = None
+
+# Every agent in this package runs this model. It is priced in
+# budget.MODEL_PRICING; if that ever drifts, price_of raises and the spend is
+# logged rather than silently costed at zero.
+AGENT_MODEL = "claude-sonnet-4-6"
 
 
 def record_model_usage(callback_context, llm_response):
-    """ADK after_model_callback. Accounting only — never alters the response."""
-    if chat_guard is None:
+    """ADK after_model_callback. Accounting only — never alters the response.
+
+    This path cannot reserve. ADK owns the model call and reports usage only
+    afterwards, so there is no moment at which this process could reserve an
+    upper bound first. What it can do is record the actual spend against the
+    same daily key, so /chat reservations that come later see it.
+    """
+    if budget is None:
         return None
     try:
         usage = getattr(llm_response, "usage_metadata", None)
         if usage is None:
             return None  # streaming partial, or a provider that reports nothing
-        chat_guard.record_usage(
+        budget.record_actual(
+            AGENT_MODEL,
             getattr(usage, "prompt_token_count", 0) or 0,
             getattr(usage, "candidates_token_count", 0) or 0,
         )

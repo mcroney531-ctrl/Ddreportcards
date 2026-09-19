@@ -43,6 +43,7 @@ from fastapi import FastAPI, HTTPException, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
+import budget
 import chat_guard
 import picks as picks_module
 from config.dynasty_config import LEAGUE
@@ -1524,24 +1525,43 @@ async def chat(request: Request) -> dict:
     # Tool-calling loop — continue until Claude returns a text response.
     # Safety cap of 5 rounds prevents runaway loops.
     for _ in range(5):
-        # The budget was checked once, at admission, and then this loop was
-        # free to make four more model calls no matter what the first ones
-        # cost. One accepted request could therefore blow straight through a
-        # budget that its own earlier rounds had already exhausted. Checking
-        # each round does not fix cold-start resets or concurrent overshoot —
-        # durable accounting is still owed — but it stops a single tool loop
-        # from continuing past the line.
+        # Every round reserves its own upper bound before the call and
+        # reconciles afterwards. Reserving per round rather than per request
+        # keeps the stranded amount small if this process dies mid-turn.
         #
-        # There is deliberately nothing to salvage here. Reaching this point
-        # on a later round means the previous round returned stop_reason
-        # "tool_use", and a request for tools is not an answer: the only
-        # rounds that produce one assign final_response and break immediately.
-        # So the budget failure is surfaced rather than handing the frontend a
-        # partial turn dressed up as a reply.
+        # There is deliberately nothing to salvage when a reservation is
+        # refused mid-loop: reaching that point means the previous round
+        # returned stop_reason "tool_use", and a request for tools is not an
+        # answer — the only rounds that produce one assign final_response and
+        # break immediately. So the failure is surfaced rather than handing
+        # the frontend a partial turn dressed up as a reply.
+        # Count the exact payload rather than estimating it. This is a free
+        # endpoint — no tokens are billed — and it turns the input half of the
+        # reservation from a guess into a measurement.
         try:
-            chat_guard.check_budget()
-        except chat_guard.ChatRefused as refused:
-            raise HTTPException(status_code=refused.status_code, detail=refused.detail)
+            counted = await asyncio.to_thread(
+                _anthropic_client.messages.count_tokens,
+                model=model, system=system, messages=messages, tools=CHAT_TOOLS,
+            )
+            counted_input = int(getattr(counted, "input_tokens", 0) or 0)
+        except Exception:  # noqa: BLE001
+            # Degrade toward over-charging, never toward unmetered: a
+            # deliberately pessimistic character estimate, not a skipped
+            # reservation.
+            counted_input = -(-(len(str(messages)) + len(system)) // 3)
+
+        try:
+            reservation = budget.reserve(model, counted_input, max_tokens)
+        except budget.BudgetExhausted as exc:
+            raise HTTPException(status_code=429, detail=str(exc))
+        except budget.BudgetUnavailable:
+            raise HTTPException(
+                status_code=503,
+                detail="Spend accounting is unavailable, so this request "
+                       "cannot be authorised. Try again shortly.",
+            )
+        except budget.UnpricedModel as exc:
+            raise HTTPException(status_code=400, detail=str(exc))
 
         try:
             resp = await asyncio.to_thread(
@@ -1553,14 +1573,21 @@ async def chat(request: Request) -> dict:
                 tools=CHAT_TOOLS,
             )
         except Exception as exc:  # noqa: BLE001 — surface as a normal error response
+            # The reservation is NOT released. From here we cannot tell a
+            # connection that never opened from a response that was generated
+            # and billed before the socket died, and the safe reading of an
+            # ambiguous failure is that the money left the account. A smaller
+            # daily allowance is an acceptable error; an unrecorded charge is
+            # not. A stranded reservation expires with the day key.
             return {"error": str(exc)}
 
-        # Count every round, not just the last one: a tool-heavy turn makes
-        # several full calls, and a budget that saw only the final response
-        # would undercount it by most of its actual cost.
+        # Reconcile to truth. Normally negative, because output was reserved
+        # at the max_tokens ceiling and real replies are shorter.
         usage = getattr(resp, "usage", None)
-        chat_guard.record_usage(
-            getattr(usage, "input_tokens", 0), getattr(usage, "output_tokens", 0)
+        budget.settle(
+            reservation,
+            getattr(usage, "input_tokens", 0) or 0,
+            getattr(usage, "output_tokens", 0) or 0,
         )
 
         if resp.stop_reason != "tool_use":

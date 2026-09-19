@@ -13,7 +13,9 @@ because the weakest one is the one that looks the most like security:
 
   1. Per-request caps (model allowlist, token ceiling, body size). These
      genuinely bound what a single call can cost, and cannot be bypassed.
-  2. A daily token budget. Bounds total loss no matter who is calling.
+  2. A daily SPEND budget, in microdollars, held in a durable store and
+     reserved atomically before each model round. Bounds total loss no
+     matter who is calling, and survives a restart.
   3. Per-IP rate limiting. Bounds how fast one abuser can work.
   4. Origin allowlist. Stops other websites spending the key from a browser.
   5. A shared secret. A speed bump — it stops scanners that probe for open
@@ -25,9 +27,12 @@ down, which is what the keepalive ping is for. This is a spend cap, not an
 audit log.
 """
 
+import logging
 import os
 import threading
 import time
+
+import budget
 
 # ── Configuration ───────────────────────────────────────────────────────────
 # Every limit is env-overridable so it can be tightened without a deploy.
@@ -39,20 +44,32 @@ def _int_env(name: str, default: int) -> int:
         return default
 
 
-# Frontend asks for claude-sonnet-5. Anything outside this list is refused
-# rather than silently downgraded — a caller asking for a model we won't run
-# should be told, not quietly served something else.
-# claude-sonnet-4-5 stays listed through the rollout: this is a PWA, so a
-# browser holding a cached index.html keeps asking for it, and dropping it
-# here would 400 those clients until they picked up the new page.
-ALLOWED_MODELS = {
+# Sonnet 5 only. Every call site in the frontend asks for it and nothing else
+# (verified across index.html and the Netlify functions before narrowing this),
+# so the previous entries were compatibility for callers that do not exist.
+# Sonnet 4.5 in particular is near its retirement window and was only ever
+# here for cached PWA clients — and the service worker is network-first, so
+# those pick up the current bundle on their next online load.
+#
+# The narrowing matters because of the rule below it: budget.MODEL_PRICING is
+# authoritative. An operator can narrow this set by env var but cannot widen
+# it past what the spend system knows how to cost, so a model can never be
+# permitted and billed at zero. Adding one is a deliberate paired edit —
+# price it, then permit it.
+_REQUESTED_MODELS = {
     m.strip()
-    for m in (
-        os.environ.get("GM_CHAT_ALLOWED_MODELS")
-        or "claude-sonnet-5,claude-haiku-4-5,claude-sonnet-4-5"
-    ).split(",")
+    for m in (os.environ.get("GM_CHAT_ALLOWED_MODELS") or "claude-sonnet-5").split(",")
     if m.strip()
 }
+_UNPRICED = _REQUESTED_MODELS - set(budget.MODEL_PRICING)
+if _UNPRICED:
+    # Loud, and then excluded. A model whose spend cannot be bounded does not
+    # get served because someone put it in an env var.
+    logging.getLogger("gm.chat_guard").error(
+        "Refusing to serve unpriced model(s) %s — add them to "
+        "budget.MODEL_PRICING first.", sorted(_UNPRICED),
+    )
+ALLOWED_MODELS = _REQUESTED_MODELS & set(budget.MODEL_PRICING)
 
 # Raised from 4000 with the move to Sonnet 5. Thinking is on by default
 # there and its tokens count against max_tokens, so a ceiling sized for the
@@ -87,7 +104,9 @@ RATE_LIMIT_WINDOW_SECONDS = _int_env("GM_CHAT_RATE_WINDOW", 300)
 # Rough guide: a tool-calling turn runs 15-40k input tokens across its
 # rounds. 2M/day leaves a normal user far more headroom than they will use
 # while capping a runaway at something survivable.
-DAILY_TOKEN_BUDGET = _int_env("GM_CHAT_DAILY_TOKENS", 2_000_000)
+# Superseded by budget.DAILY_LIMIT_MICRO. Kept only so an operator reading an
+# old runbook sees why GM_CHAT_DAILY_TOKENS no longer does anything.
+DAILY_TOKEN_BUDGET_RETIRED = _int_env("GM_CHAT_DAILY_TOKENS", 0)
 
 SHARED_SECRET = os.environ.get("GM_CHAT_SECRET") or ""
 SECRET_HEADER = "x-gm-key"
@@ -166,10 +185,10 @@ def check_rate_limit(
                 _hits.pop(k, None)
 
 
-# ── Daily token budget ──────────────────────────────────────────────────────
-
-_budget_day: str = ""
-_budget_used: int = 0
+# ── Daily spend budget ──────────────────────────────────────────────────────
+#
+# The counter itself now lives in budget.py: durable, atomic, denominated in
+# microdollars. What remains here is the request-path gate.
 
 
 def _today_key(now: float | None = None) -> str:
@@ -177,39 +196,35 @@ def _today_key(now: float | None = None) -> str:
 
 
 def check_budget(now: float | None = None) -> None:
-    global _budget_day, _budget_used
-    day = _today_key(now)
-    with _lock:
-        if day != _budget_day:
-            _budget_day, _budget_used = day, 0
-        if _budget_used >= DAILY_TOKEN_BUDGET:
-            raise ChatRefused(
-                429,
-                "Daily token budget for this service is spent. It resets at "
-                "00:00 UTC.",
-            )
+    """Is there anything left today.
 
+    Used by paths that cannot reserve in advance — the report pipeline, and
+    the cheap pre-flight on /chat. The real protection on /chat is the
+    per-round reservation in the tool loop; this only avoids starting work
+    that is already doomed.
 
-def record_usage(input_tokens: int, output_tokens: int, now: float | None = None) -> None:
-    """Called after every Anthropic response, including intermediate
-    tool-loop rounds — those cost real money and a budget that ignored them
-    would undercount a tool-heavy turn several times over."""
-    global _budget_day, _budget_used
-    day = _today_key(now)
-    with _lock:
-        if day != _budget_day:
-            _budget_day, _budget_used = day, 0
-        _budget_used += max(0, int(input_tokens or 0)) + max(0, int(output_tokens or 0))
+    Fails CLOSED: an unreachable store means the spend control is not
+    operating, and a public endpoint holding a real API key does not run
+    unmetered because a dependency is down.
+    """
+    try:
+        room = budget.has_room()
+    except budget.BudgetUnavailable as exc:
+        raise ChatRefused(
+            503,
+            "Spend accounting is unavailable, so this request cannot be "
+            "authorised. Try again shortly.",
+        ) from exc
+    if not room:
+        raise ChatRefused(
+            429,
+            "Daily spend budget for this service is spent. It resets at "
+            "00:00 UTC.",
+        )
 
 
 def budget_status() -> dict:
-    with _lock:
-        used = _budget_used if _budget_day == _today_key() else 0
-    return {
-        "used_tokens": used,
-        "daily_budget": DAILY_TOKEN_BUDGET,
-        "remaining": max(0, DAILY_TOKEN_BUDGET - used),
-    }
+    return budget.status()
 
 
 # ── Request validation ──────────────────────────────────────────────────────
@@ -326,5 +341,23 @@ def config_warnings() -> list[str]:
     if not SHARED_SECRET:
         warnings.append(
             "GM_CHAT_SECRET is not set — /chat accepts unauthenticated requests."
+        )
+    if not budget.store().durable:
+        warnings.append(
+            "Budget store is not durable (GM_BUDGET_BACKEND=memory) — the daily "
+            "spend budget resets on every restart."
+        )
+    else:
+        try:
+            budget.has_room()
+        except budget.BudgetUnavailable:
+            warnings.append(
+                "Budget store is unreachable — /chat is refusing requests (503) "
+                "rather than spending unmetered."
+            )
+    if _UNPRICED:
+        warnings.append(
+            f"Model(s) {sorted(_UNPRICED)} are allowlisted but have no verified "
+            f"price, so they are refused. Add them to budget.MODEL_PRICING."
         )
     return warnings
