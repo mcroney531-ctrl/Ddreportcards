@@ -11,3 +11,13 @@ services:
         sync: false
       - key: GOOGLE_API_KEY
         sync: false
+      - key: GM_BUDGET_BACKEND
+        value: redis
+      - key: GM_UPSTASH_REST_URL
+        sync: false
+      - key: GM_UPSTASH_REST_TOKEN
+        sync: false
+      - key: GM_CHAT_SECRET
+        sync: false
+      - key: GM_CHAT_DAILY_USD_MICROS
+        value: "5000000"
