@@ -60,18 +60,26 @@ ALLOWED_MODELS = {
 # mid-thought returns no text block at all. This is a cap, not a reservation:
 # raising it costs nothing on a reply that does not need the room.
 MAX_TOKENS_CEILING = _int_env("GM_CHAT_MAX_TOKENS", 16000)
-# Both counts include assistant turns, so 60 messages was really 30 exchanges
-# — short enough that a normal trade conversation hit it. Sized now against
-# Sonnet 5's 1M context rather than against caution: 600k chars is roughly
-# 150k tokens, which leaves the model's whole context free for the system
-# prompt, eleven tool definitions, and the tool results the loop appends
-# mid-turn (a league rosters summary or a full pick inventory is not small).
+# Two knobs, two different jobs, and they should not have moved together.
 #
-# These bound one REQUEST. What bounds spend is the daily token budget below,
-# which is the right place for it: history is resent every turn, so a long
-# conversation gets expensive per message whatever these are set to.
+# The failure actually observed was the MESSAGE ceiling: both counts include
+# assistant turns, so 60 messages was really 30 exchanges, and a normal trade
+# conversation hit it. That one stays raised.
+#
+# The CHARACTER ceiling was raised in the same edit without evidence that it
+# was ever the binding constraint, and it is the half that bounds spend. It
+# goes back to 120k. The reasoning for 600k — "Sonnet 5 has a 1M context" —
+# answered the wrong question: the context window says what the model can
+# read, not what this service should agree to pay for on one public request.
+#
+# What 600k actually bought, per accepted request: roughly 150k input tokens
+# resent on every round of a tool loop that runs up to five of them, plus the
+# system prompt, eleven tool definitions and the tool results appended
+# mid-turn. That is the better part of a million input tokens from a single
+# message, against a daily budget of two million that a process restart
+# resets to zero. At 120k the same worst case is roughly a fifth of that.
 MAX_MESSAGES = _int_env("GM_CHAT_MAX_MESSAGES", 500)
-MAX_BODY_CHARS = _int_env("GM_CHAT_MAX_BODY_CHARS", 600_000)
+MAX_BODY_CHARS = _int_env("GM_CHAT_MAX_BODY_CHARS", 120_000)
 
 RATE_LIMIT_REQUESTS = _int_env("GM_CHAT_RATE_REQUESTS", 20)
 RATE_LIMIT_WINDOW_SECONDS = _int_env("GM_CHAT_RATE_WINDOW", 300)

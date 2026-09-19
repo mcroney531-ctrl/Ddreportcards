@@ -1524,6 +1524,20 @@ async def chat(request: Request) -> dict:
     # Tool-calling loop — continue until Claude returns a text response.
     # Safety cap of 5 rounds prevents runaway loops.
     for _ in range(5):
+        # The budget was checked once, at admission, and then this loop was
+        # free to make four more model calls no matter what the first ones
+        # cost. One accepted request could therefore blow straight through a
+        # budget that its own earlier rounds had already exhausted. Checking
+        # each round does not fix cold-start resets or concurrent overshoot —
+        # durable accounting is still owed — but it stops a single tool loop
+        # from continuing past the line.
+        try:
+            chat_guard.check_budget()
+        except chat_guard.ChatRefused as refused:
+            if final_response is not None:
+                break  # keep what we already have rather than failing the turn
+            raise HTTPException(status_code=refused.status_code, detail=refused.detail)
+
         try:
             resp = await asyncio.to_thread(
                 _anthropic_client.messages.create,
