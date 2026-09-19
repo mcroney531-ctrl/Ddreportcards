@@ -746,6 +746,9 @@ def _describe_trade_side(
             continue
         fc = fc_index.get(pid)
         value = fc.get("value") if fc else None
+        # `or 0` keeps the running total usable, but a missing value is NOT a
+        # zero-valued player — see unvalued_players below, which stops that
+        # partial total from ever becoming a verdict.
         total_value += value or 0
         players.append({
             "player_id": pid,
@@ -773,6 +776,11 @@ def _describe_trade_side(
         "picks": described_picks,
         "pick_value": priced_picks,
         "unpriced_picks": [p["pick"] for p in described_picks if p["dynasty_value"] is None],
+        # A rostered player FantasyCalc does not price — common for rookies,
+        # which is exactly who dynasty trades are about. Counted separately
+        # from unknown_ids because the failure is different: we know who he
+        # is and not what he is worth.
+        "unvalued_players": [p["name"] or p["player_id"] for p in players if p["unvalued"]],
         # Named so it cannot be read as the value of everything on this side.
         "player_value_only": total_value,
         "total_value_with_picks": total_value + priced_picks,
@@ -894,7 +902,20 @@ def evaluate_trade(body: TradeEvaluateRequest) -> dict:
     total_winner = "team_a" if net_total_to_a > 0 else "team_b" if net_total_to_a < 0 else None
 
     all_picks = team_a["picks"] + team_b["picks"]
-    unpriced = team_a["unpriced_picks"] + team_b["unpriced_picks"]
+    # One completeness rule covering every asset class, because the failure is
+    # identical in all three: a total that silently omits something, presented
+    # as if it covered the whole trade. Picks already behaved this way; players
+    # did not. An unvalued player contributed 0 to the total and a verdict came
+    # back anyway — and FantasyCalc lags hardest on rookies, who are precisely
+    # what dynasty trades are made of.
+    incomplete: list[str] = []
+    for label, side in (("team_a", team_a), ("team_b", team_b)):
+        for pick in side["unpriced_picks"]:
+            incomplete.append(f"{pick} (pick, no FantasyCalc value)")
+        for name in side["unvalued_players"]:
+            incomplete.append(f"{name} (player, no FantasyCalc value)")
+        for pid in side["unknown_ids"]:
+            incomplete.append(f"player_id {pid} (not a tracked player — unresolvable)")
 
     result = {
         "team_a_sends": team_a["players"],
@@ -915,15 +936,19 @@ def evaluate_trade(body: TradeEvaluateRequest) -> dict:
         "warnings": warnings,
     }
 
-    if unpriced:
-        # One unpriced pick makes the total a floor, not a total. A verdict
-        # built on it would be reported as if it covered the whole trade.
+    if incomplete:
+        # Any unvalued asset makes every total above a floor rather than a
+        # total. The known values are kept — they are still useful — but they
+        # can no longer be turned into a verdict.
         result["fairness"] = None
+        result["incomplete_assets"] = incomplete
         result["verdict_withheld"] = (
-            f"No FantasyCalc value exists for {', '.join(unpriced)}, so the totals above are "
-            "incomplete and NO fairness verdict is available. Say which picks are unpriced, "
-            "give the values you do have, and let him weigh the rest — do not assign those "
-            "picks a value yourself, in either direction."
+            "NO fairness verdict is available: these assets in the trade have no value on "
+            f"file — {'; '.join(incomplete)}. Every total above therefore excludes them and "
+            "is a floor, not a total. Name the assets that are missing values, give the "
+            "figures you do have and say what they cover, and let him weigh the rest. Do "
+            "not assign any of them a value yourself, in either direction, and do not treat "
+            "a missing value as zero."
         )
     else:
         result["fairness"] = _fairness_label(total_delta_pct, total_winner)
@@ -1149,6 +1174,10 @@ CHAT_TOOLS = [
             "team_a/team_b are just labels — the response's `direction` field resolves which side is "
             "actually the user by checking who is on his roster, and flags a conflict if you split the "
             "players the wrong way. Read it before saying who wins. "
+            "COMPLETENESS: if any asset on either side has no FantasyCalc value on file — an "
+            "unpriced pick, an unpriced player, or an unresolvable player_id — fairness comes "
+            "back null with incomplete_assets listing them. That is the correct outcome, not a "
+            "failure, and the partial totals must not be presented as the trade's value. "
             "DRAFT PICKS: if the trade includes any, you MUST pass them in team_a_picks/team_b_picks "
             "on the correct sides. Picks have no value source, so including them makes the tool "
             "withhold the fairness verdict — that is the correct outcome, not a failure. Omitting "
@@ -1291,9 +1320,12 @@ CHAT_SYSTEM_PROMPT = (
     "6. For any question about whether a trade is fair, call evaluate_trade with the sleeper_ids on "
     "each side — never estimate the value delta yourself. If the trade includes draft picks, put "
     "them in team_a_picks/team_b_picks on the correct sides; they are priced and counted. When "
-    "any pick comes back unpriced the verdict is withheld — say which one and why, and do not "
-    "supply a value for it in either direction. Never let a players-only number stand in for the "
-    "whole trade: a surplus that ignores three outgoing picks is not a surplus.\n"
+    "ANY asset in the trade has no value on file — an unpriced pick, a player FantasyCalc does "
+    "not price, or a player_id that does not resolve — the verdict is withheld and "
+    "incomplete_assets names them. Say which ones are missing values and why, give the figures "
+    "you do have and say what they cover, and never supply a value for a missing asset in "
+    "either direction or treat one as zero. Never let a partial number stand in for the whole "
+    "trade: a surplus that ignores three outgoing picks is not a surplus.\n"
     "7. get_player_value is a name search, not a single lookup — it can return several different "
     "real people who share a name. If the result carries identity_resolved, the question is already "
     "settled: somebody in this league rosters that player, so that is the one meant — use the "
