@@ -134,12 +134,23 @@ def record_model_usage(callback_context, llm_response):
     return None
 
 
-def clear_invocation_reservation(callback_context, error=None):
+def clear_invocation_reservation(callback_context, llm_request, error):
     """ADK on_model_error_callback.
 
-    Drops the association only. The reservation stays charged, because from
+    The signature is the contract, not a convenience: ADK invokes this with
+    callback_context, llm_request and error all as KEYWORD arguments
+    (_SingleOnModelErrorCallback is Callable[[CallbackContext, LlmRequest,
+    Exception], ...]). The previous (callback_context, error=None) form would
+    have raised TypeError: unexpected keyword argument 'llm_request' on the
+    first real provider failure — masking the provider error behind a
+    callback error and leaving the association uncleared.
+
+    It drops the association only. The reservation stays charged, because from
     here a call that never reached the provider is indistinguishable from one
     that was generated and billed before the error surfaced.
+
+    Returns None so ADK re-raises the original error rather than treating this
+    as a handled response.
     """
     key = _invocation_key(callback_context)
     with _lock:

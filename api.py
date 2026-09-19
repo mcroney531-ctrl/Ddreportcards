@@ -1655,6 +1655,37 @@ async def chat(request: Request) -> dict:
     return payload
 
 
+def _budget_http_error(exc: Exception) -> HTTPException:
+    """Give a budget refusal the status it means.
+
+    The agent callbacks now refuse model calls from inside a running pipeline,
+    which means these can surface well after the endpoint's own preflight has
+    passed. Without this they escaped as 500s, so a working spend control
+    looked like a broken service.
+    """
+    if isinstance(exc, budget.BudgetExhausted):
+        return HTTPException(status_code=429, detail=str(exc))
+    if isinstance(exc, budget.UnpricedModel):
+        # Server misconfiguration, not the caller's fault: an agent is wired to
+        # a model the spend system cannot cost. No provider call happened.
+        return HTTPException(
+            status_code=500,
+            detail="This report is configured to use a model with no verified "
+                   "price, so it cannot be run. " + str(exc),
+        )
+    # BudgetUnavailable and BudgetMisconfigured both land here.
+    return HTTPException(
+        status_code=503,
+        detail="Spend accounting is unavailable, so this report cannot be "
+               "authorised. Try again shortly.",
+    )
+
+
+def _is_budget_control(exc: object) -> bool:
+    return isinstance(exc, (budget.BudgetExhausted, budget.BudgetUnavailable,
+                            budget.UnpricedModel))
+
+
 # ── Pipeline endpoints (LLM calls) ─────────────────────────────────────────
 #
 # synthesis_agent uses _run_in_thread() internally to dodge Streamlit's
@@ -1670,7 +1701,11 @@ async def report_player(sleeper_id: str, request: Request) -> dict:
     except chat_guard.ChatRefused as refused:
         raise HTTPException(status_code=refused.status_code, detail=refused.detail)
     from agents.synthesis_agent import run_synthesis_agent
-    return await run_synthesis_agent(sleeper_id)
+    try:
+        return await run_synthesis_agent(sleeper_id)
+    except (budget.BudgetExhausted, budget.BudgetUnavailable, budget.UnpricedModel) as exc:
+        # Raised by the agent callbacks mid-pipeline, after preflight passed.
+        raise _budget_http_error(exc)
 
 
 @app.post("/report/roster/{owner}")
@@ -1710,6 +1745,15 @@ async def report_roster(owner: str, request: Request) -> dict:
         return_exceptions=True,
     )
 
+    # A budget refusal is not "this player failed". return_exceptions=True
+    # flattens everything into the results list, so a spend control doing its
+    # job would otherwise have been filed as a per-player data error and the
+    # report would have carried on to grade a partial roster — and then made
+    # one more model call to do it.
+    budget_stops = [c for c in results if _is_budget_control(c)]
+    if budget_stops:
+        raise _budget_http_error(budget_stops[0])
+
     valid_cards = [c for c in results if isinstance(c, dict) and "error" not in c]
     error_entries = [
         {"player_id": players[i]["player_id"], "name": players[i].get("full_name"), "error": str(c)}
@@ -1717,7 +1761,13 @@ async def report_roster(owner: str, request: Request) -> dict:
         if not isinstance(c, dict) or "error" in c
     ]
 
-    roster_grade = await run_roster_agent(valid_cards)
+    # Reservations already taken by the concurrent batch are left alone: some
+    # of those calls may have reached the provider, and releasing them would
+    # under-count real spend.
+    try:
+        roster_grade = await run_roster_agent(valid_cards)
+    except (budget.BudgetExhausted, budget.BudgetUnavailable, budget.UnpricedModel) as exc:
+        raise _budget_http_error(exc)
 
     return {
         "owner": owner,
