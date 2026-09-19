@@ -1220,6 +1220,10 @@ CHAT_TOOLS = [
     },
 ]
 
+# Serialised once: the fallback token estimate needs its size, and
+# re-serialising 8KB of tool definitions per failed count is wasteful.
+_CHAT_TOOLS_JSON = json.dumps(CHAT_TOOLS)
+
 
 def _execute_chat_tool(name: str, tool_input: dict, latest_user_text: str = "") -> dict:
     """Dispatch a Claude tool call to the matching route function above,
@@ -1548,7 +1552,13 @@ async def chat(request: Request) -> dict:
             # Degrade toward over-charging, never toward unmetered: a
             # deliberately pessimistic character estimate, not a skipped
             # reservation.
-            counted_input = -(-(len(str(messages)) + len(system)) // 3)
+            #
+            # It must cover everything the real count covers. Omitting
+            # CHAT_TOOLS left out ~8.3KB of tool definitions that go up on
+            # every round — more than the system prompt — so the "pessimistic"
+            # path was quietly the optimistic one.
+            fallback_chars = len(str(messages)) + len(system) + len(_CHAT_TOOLS_JSON)
+            counted_input = -(-fallback_chars // 3)
 
         try:
             reservation = budget.reserve(model, counted_input, max_tokens)

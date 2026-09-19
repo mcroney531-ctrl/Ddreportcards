@@ -19,7 +19,7 @@ from google.adk.runners import Runner
 from google.adk.sessions import InMemorySessionService
 from google.genai import types as genai_types
 
-from agents.usage import record_model_usage
+from agents.usage import check_budget_before_model, record_model_usage
 
 from agents.situation_agent import run_situation_agent
 from agents.production_agent import run_production_agent
@@ -137,6 +137,7 @@ Output format — return a JSON object with these exact keys:
 def build_synthesis_agent(sub_results: dict) -> LlmAgent:
     return LlmAgent(
         model=LiteLlm(model="anthropic/claude-sonnet-4-6", api_key=os.getenv("ANTHROPIC_API_KEY")),
+        before_model_callback=check_budget_before_model,
         after_model_callback=record_model_usage,
         name="synthesis_agent",
         instruction=SYSTEM_PROMPT,

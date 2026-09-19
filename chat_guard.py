@@ -342,19 +342,32 @@ def config_warnings() -> list[str]:
         warnings.append(
             "GM_CHAT_SECRET is not set — /chat accepts unauthenticated requests."
         )
-    if not budget.store().durable:
+    # /health is how a misconfiguration gets NOTICED, so nothing in here may
+    # raise — including store(), which now refuses to build on a bad or
+    # missing backend config rather than silently falling back to memory.
+    try:
+        durable = budget.store().durable
+    except budget.BudgetUnavailable:
         warnings.append(
-            "Budget store is not durable (GM_BUDGET_BACKEND=memory) — the daily "
-            "spend budget resets on every restart."
+            "Budget store is misconfigured — /chat and /report are refusing "
+            "requests (503) rather than spending unmetered. Check "
+            "GM_BUDGET_BACKEND and the Upstash settings."
         )
     else:
-        try:
-            budget.has_room()
-        except budget.BudgetUnavailable:
+        if not durable:
             warnings.append(
-                "Budget store is unreachable — /chat is refusing requests (503) "
-                "rather than spending unmetered."
+                "Budget store is not durable (GM_BUDGET_BACKEND=memory) — the "
+                "daily spend budget resets on every restart. This is intended "
+                "for local development only."
             )
+        else:
+            try:
+                budget.has_room()
+            except budget.BudgetUnavailable:
+                warnings.append(
+                    "Budget store is unreachable — /chat and /report are "
+                    "refusing requests (503) rather than spending unmetered."
+                )
     if _UNPRICED:
         warnings.append(
             f"Model(s) {sorted(_UNPRICED)} are allowlisted but have no verified "

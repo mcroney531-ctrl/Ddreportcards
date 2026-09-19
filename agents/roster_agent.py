@@ -21,7 +21,7 @@ from google.adk.runners import Runner
 from google.adk.sessions import InMemorySessionService
 from google.genai import types as genai_types
 
-from agents.usage import record_model_usage
+from agents.usage import check_budget_before_model, record_model_usage
 
 # League format: 12-team, superflex (2 QB starts), PPR dynasty.
 BASE_STARTER_SLOTS = {"QB": 1, "RB": 2, "WR": 2, "TE": 1}
@@ -193,6 +193,7 @@ Output format — return a JSON object with these exact keys:
 def build_roster_agent() -> LlmAgent:
     return LlmAgent(
         model=LiteLlm(model="anthropic/claude-sonnet-4-6", api_key=os.getenv("ANTHROPIC_API_KEY")),
+        before_model_callback=check_budget_before_model,
         after_model_callback=record_model_usage,
         name="roster_agent",
         instruction=SYSTEM_PROMPT,

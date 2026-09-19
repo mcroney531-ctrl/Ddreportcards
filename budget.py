@@ -93,7 +93,10 @@ def _int_env(name: str, default: int) -> int:
 DAILY_LIMIT_MICRO = _int_env("GM_CHAT_DAILY_USD_MICROS", 5 * USD)  # $5.00/day
 KEY_PREFIX = os.environ.get("GM_BUDGET_KEY_PREFIX", "gm:spend:v1")
 TTL_SECONDS = _int_env("GM_BUDGET_TTL_SECONDS", 172_800)  # 48h
-BACKEND = (os.environ.get("GM_BUDGET_BACKEND") or "memory").strip().lower()
+# Durable is the default. An unset variable must not quietly reinstate the
+# restart-resetting counter this module exists to replace — that is the exact
+# weakness the work was for, and a /health warning is not a control.
+BACKEND = (os.environ.get("GM_BUDGET_BACKEND") or "redis").strip().lower()
 
 UPSTASH_URL = (os.environ.get("GM_UPSTASH_REST_URL") or "").rstrip("/")
 UPSTASH_TOKEN = os.environ.get("GM_UPSTASH_REST_TOKEN") or ""
@@ -109,6 +112,15 @@ def day_key(now: datetime.datetime | None = None) -> str:
 
 class BudgetUnavailable(RuntimeError):
     """The store is required but unusable. Callers must fail closed."""
+
+
+class BudgetMisconfigured(BudgetUnavailable):
+    """The backend is not a recognised value, or its settings are missing.
+
+    A subclass of BudgetUnavailable so every existing fail-closed path already
+    handles it: a service that cannot tell what its budget backend is has no
+    business spending money.
+    """
 
 
 class BudgetExhausted(RuntimeError):
@@ -276,14 +288,32 @@ _store_lock = threading.Lock()
 
 
 def store():
+    """The configured store, or an exception.
+
+    Deliberately no fallback path. Falling back from redis to memory on a
+    missing variable or a typo would turn a configuration mistake into a
+    silently unmetered service, which is the failure this whole module is
+    built to prevent.
+    """
     global _store
     if _store is None:
         with _store_lock:
             if _store is None:
                 if BACKEND == "redis":
+                    if not UPSTASH_URL or not UPSTASH_TOKEN:
+                        raise BudgetMisconfigured(
+                            "GM_BUDGET_BACKEND=redis but GM_UPSTASH_REST_URL / "
+                            "GM_UPSTASH_REST_TOKEN are not set."
+                        )
                     _store = UpstashBudgetStore(UPSTASH_URL, UPSTASH_TOKEN)
-                else:
+                elif BACKEND == "memory":
+                    # Development and tests only, and only when asked for by name.
                     _store = MemoryBudgetStore()
+                else:
+                    raise BudgetMisconfigured(
+                        f"GM_BUDGET_BACKEND={BACKEND!r} is not a known backend "
+                        f"(expected 'redis' or 'memory')."
+                    )
     return _store
 
 
@@ -357,19 +387,34 @@ def has_room(now: datetime.datetime | None = None) -> bool:
 
 
 def status(now: datetime.datetime | None = None) -> dict:
-    """Safe to expose. Never contains the store URL, the token, or any secret."""
-    s = store()
+    """Safe to expose.
+
+    Classifications only. The underlying exception is NOT included: it comes
+    from an HTTP client and can carry the Upstash endpoint in its message, so
+    the detail is logged server-side and the caller gets a code.
+    """
     out = {
-        "backend": s.name,
-        "durable": s.durable,
+        "backend": BACKEND,
+        "configured": bool(UPSTASH_URL and UPSTASH_TOKEN) if BACKEND == "redis" else True,
         "day": day_key(now).rsplit(":", 1)[-1],
         "limit_micro": DAILY_LIMIT_MICRO,
         "limit_usd": round(DAILY_LIMIT_MICRO / USD, 2),
     }
     try:
+        s = store()
+    except BudgetUnavailable as exc:
+        # Must still render: /health is how a misconfiguration gets noticed.
+        log.error("budget store unavailable: %s", exc)
+        out.update(durable=(BACKEND == "redis"), reachable=False,
+                   error="budget_store_unavailable")
+        return out
+
+    out["durable"] = s.durable
+    try:
         spent = s.get(day_key(now))
         out.update(reachable=True, spent_micro=spent,
                    remaining_micro=max(0, DAILY_LIMIT_MICRO - spent))
     except BudgetUnavailable as exc:
-        out.update(reachable=False, error=str(exc)[:120])
+        log.error("budget store unreachable: %s", exc)
+        out.update(reachable=False, error="budget_store_unavailable")
     return out
