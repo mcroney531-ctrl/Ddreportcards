@@ -181,9 +181,11 @@ def build_pick_inventory(league_id: str) -> dict:
         f"{seasons[0] if seasons else 'future'} 2nd, not this specific one. Whose pick it is "
         "usually matters more than the round: each pick carries its origin team and that "
         "team's current standing.",
-        "This league drafts in reverse standings order, so an origin team sitting last is "
-        "an early pick and one sitting first is a late one — for the NEXT draft. Standings "
-        "two or three seasons out are not knowable and are not projected here.",
+        "This league drafts in reverse standings order, so for the NEXT draft an origin "
+        "team's standing TODAY implies where its pick would land IF THE SEASON ENDED NOW. "
+        "That is a snapshot, not a slot: standings move every week, so say 'currently "
+        "projects as' rather than 'is'. Standings two or three seasons out are not "
+        "knowable at all and are not projected here.",
     ]
     if any(p["dynasty_value"] is None for t in teams for p in t["picks"]):
         notes.append(

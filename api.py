@@ -1220,16 +1220,18 @@ CHAT_TOOLS = [
 ]
 
 
-def _execute_chat_tool(name: str, tool_input: dict, conversation_text: str = "") -> dict:
+def _execute_chat_tool(name: str, tool_input: dict, latest_user_text: str = "") -> dict:
     """Dispatch a Claude tool call to the matching route function above,
     in-process — no HTTP round-trip. Route functions raise HTTPException on
     a bad lookup (unknown player/team); convert that to an {"error": ...}
     dict instead of letting it propagate and abort the whole chat turn.
 
-    conversation_text is what the user actually wrote this conversation. It
-    exists so a trade evaluation can be checked against the trade that was
-    proposed, rather than trusting that every part of it made it into the
-    call."""
+    latest_user_text is the user's most recent message — the trade actually
+    under discussion. It exists so a trade evaluation can be checked against
+    what was proposed, rather than trusting that every part of it made it into
+    the call. Deliberately not the whole conversation: an earlier, unrelated
+    mention of a pick would otherwise withhold the verdict on a trade that
+    never contained one."""
     try:
         if name == "get_player_value":
             return search_players(q=tool_input.get("player_name", ""))
@@ -1279,11 +1281,11 @@ def _execute_chat_tool(name: str, tool_input: dict, conversation_text: str = "")
             # pull the verdict if anything is missing, rather than relying
             # on the call having been complete.
             if not (a_picks or b_picks):
-                mentioned = find_picks_in_text(conversation_text)
+                mentioned = find_picks_in_text(latest_user_text)
                 if mentioned:
                     result["fairness"] = None
                     result["verdict_withheld"] = (
-                        "This evaluation was run with NO picks, but the conversation "
+                        "This evaluation was run with NO picks, but his message "
                         f"mentions {', '.join(mentioned)}. The numbers above therefore "
                         "describe a different trade than the one asked about, and no "
                         "fairness verdict is available. Call evaluate_trade again with "
@@ -1416,10 +1418,12 @@ CHAT_SYSTEM_PROMPT = (
     "alongside the players — read it. Never discuss a rebuild, a timeline, or what he has to "
     "trade without knowing what picks he actually holds, and never describe someone else's "
     "picks without calling get_pick_inventory first. When a pick matters to the read, say whose "
-    "it is: this league drafts in reverse standings order, so the last-place team's 2027 2nd is "
-    "an early second and the leader's is a late one. That is a fact about the NEXT draft only — "
-    "for seasons beyond it, give him the origin team's current standing and let him judge, "
-    "rather than projecting a finish you cannot know.\n"
+    "it is: this league drafts in reverse standings order, so for the NEXT draft the "
+    "last-place team's 2027 2nd currently projects as an early second and the leader's as a "
+    "late one. Say it that way — 'currently projects as', not 'is'. Standings move every "
+    "week and nothing has been decided; a pick only has a slot once the season ends. For "
+    "seasons beyond the next draft there is no projection at all, so give him the origin "
+    "team's standing today and let him judge.\n"
     "17. The context block the app prepends about players he named is a STARTING POINT, not a "
     "source. It is resolved from a cached player dictionary that may be hours old, so its team, "
     "depth chart and injury fields can be stale — a live lookup overrides them every time. Its "
@@ -1547,16 +1551,21 @@ async def chat(request: Request) -> dict:
         # Execute all tool_use blocks in this turn concurrently (thread pool,
         # since the underlying Sleeper/FantasyCalc/ESPN calls are sync I/O).
         tool_use_blocks = [b for b in resp.content if b.type == "tool_use"]
-        # The user's own turns only. Tool results are appended as user-role
-        # messages with list content, so filtering to plain strings keeps
-        # this to what he actually typed.
-        conversation_text = "\n".join(
-            m["content"] for m in messages
-            if m.get("role") == "user" and isinstance(m.get("content"), str)
+        # The trade being asked about is the one in his LATEST message, not
+        # anything he mentioned earlier in the conversation. Scanning the whole
+        # history meant a 2027 2nd named five messages ago withheld the verdict
+        # on a later, player-only trade — the check firing on a trade that was
+        # not under discussion. Tool results are appended as user-role messages
+        # with list content, so the isinstance filter keeps this to what he
+        # actually typed.
+        latest_user_text = next(
+            (m["content"] for m in reversed(messages)
+             if m.get("role") == "user" and isinstance(m.get("content"), str)),
+            "",
         )
         tool_results = await asyncio.gather(
             *[
-                asyncio.to_thread(_execute_chat_tool, b.name, b.input, conversation_text)
+                asyncio.to_thread(_execute_chat_tool, b.name, b.input, latest_user_text)
                 for b in tool_use_blocks
             ]
         )
