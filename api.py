@@ -1531,11 +1531,16 @@ async def chat(request: Request) -> dict:
         # each round does not fix cold-start resets or concurrent overshoot —
         # durable accounting is still owed — but it stops a single tool loop
         # from continuing past the line.
+        #
+        # There is deliberately nothing to salvage here. Reaching this point
+        # on a later round means the previous round returned stop_reason
+        # "tool_use", and a request for tools is not an answer: the only
+        # rounds that produce one assign final_response and break immediately.
+        # So the budget failure is surfaced rather than handing the frontend a
+        # partial turn dressed up as a reply.
         try:
             chat_guard.check_budget()
         except chat_guard.ChatRefused as refused:
-            if final_response is not None:
-                break  # keep what we already have rather than failing the turn
             raise HTTPException(status_code=refused.status_code, detail=refused.detail)
 
         try:
