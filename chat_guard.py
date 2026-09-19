@@ -54,7 +54,12 @@ ALLOWED_MODELS = {
     if m.strip()
 }
 
-MAX_TOKENS_CEILING = _int_env("GM_CHAT_MAX_TOKENS", 4000)
+# Raised from 4000 with the move to Sonnet 5. Thinking is on by default
+# there and its tokens count against max_tokens, so a ceiling sized for the
+# answer alone now has to cover the reasoning too — and a turn that runs out
+# mid-thought returns no text block at all. This is a cap, not a reservation:
+# raising it costs nothing on a reply that does not need the room.
+MAX_TOKENS_CEILING = _int_env("GM_CHAT_MAX_TOKENS", 16000)
 MAX_MESSAGES = _int_env("GM_CHAT_MAX_MESSAGES", 60)
 MAX_BODY_CHARS = _int_env("GM_CHAT_MAX_BODY_CHARS", 120_000)
 

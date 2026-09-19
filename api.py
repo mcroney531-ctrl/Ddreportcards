@@ -1541,7 +1541,21 @@ async def chat(request: Request) -> dict:
     if final_response is None:
         return {"error": "Tool-calling loop reached maximum rounds without a final text response."}
 
-    return final_response.model_dump()
+    # Say so when the turn produced no text. Thinking blocks are content too,
+    # so a response can come back well-formed and carry nothing to show —
+    # most often because the token ceiling ran out mid-thought. Returning it
+    # as-is leaves the client to render an empty bubble and guess why.
+    payload = final_response.model_dump()
+    blocks = payload.get("content") or []
+    if not any(b.get("type") == "text" and (b.get("text") or "").strip() for b in blocks):
+        stop = payload.get("stop_reason")
+        payload["error"] = (
+            "The reply hit its length cap before producing any text — the model spent the "
+            "whole budget thinking. Try a narrower question."
+            if stop == "max_tokens" else
+            f"The model returned no text (stop_reason: {stop})."
+        )
+    return payload
 
 
 # ── Pipeline endpoints (LLM calls) ─────────────────────────────────────────
