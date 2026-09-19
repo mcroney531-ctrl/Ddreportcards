@@ -30,7 +30,12 @@ from google.adk.runners import Runner
 from google.adk.sessions import InMemorySessionService
 from google.genai import types as genai_types
 
-from agents.usage import check_budget_before_model, record_model_usage
+from agents.usage import (
+    AGENT_MAX_OUTPUT_TOKENS,
+    check_budget_before_model,
+    clear_invocation_reservation,
+    record_model_usage,
+)
 
 from agents.roster_agent import _quality_score, CONTRIBUTOR_THRESHOLD
 
@@ -113,8 +118,8 @@ candidates. Phase 1 scope is sell-candidates only — do not suggest buy targets
 name players from other rosters, that data isn't available yet.
 
 Steps:
-1. Call detect_sell_signals with the player_cards_json you were given, verbatim as
-   a JSON string
+1. Call detect_current_sell_signals. It takes NO arguments — it already has the
+   roster. Do not pass the player cards to it and do not repeat them anywhere.
 2. For each entry in flagged_players, write a specific "why" — reference the actual
    signal detail(s) returned AND pull supporting context from that player's own card
    (team, position, key_concerns, narrative) to make it concrete, not generic.
@@ -148,20 +153,48 @@ If flagged_players is empty, return sell_candidates: [] and say so plainly in su
 
 # ── Agent + runner ────────────────────────────────────────────────────────────
 
-def build_trade_agent() -> LlmAgent:
+def _strip_detail(cards: list[dict]) -> list[dict]:
+    """The model's copy of the cards, minus the raw sub-agent payloads.
+
+    The prompt's narrative contract names team, position, key_concerns and
+    narrative — all card fields, all preserved. "_detail" holds the verbatim
+    situation/production/market outputs and is referenced nowhere, so the
+    model does not need to carry it. detect_sell_signals still gets the
+    untouched cards.
+    """
+    return [{k: v for k, v in c.items() if k != "_detail"} for c in cards]
+
+
+def build_trade_agent(player_cards: list[dict]) -> LlmAgent:
+    """Signal detection closes over the roster instead of taking it as an
+    argument — same reason as the roster agent: the model was being paid to
+    retransmit a payload this process already had, which is both a cost and
+    the reason no sane output ceiling could be set."""
+    def detect_current_sell_signals() -> dict:
+        """Flag sell candidates on the roster under review.
+
+        Takes no arguments: the player cards are already loaded. Call this
+        once, then explain each flagged player.
+        """
+        return detect_sell_signals(json.dumps(player_cards))
+
     return LlmAgent(
         model=LiteLlm(model="anthropic/claude-sonnet-4-6", api_key=os.getenv("ANTHROPIC_API_KEY")),
+        generate_content_config=genai_types.GenerateContentConfig(
+            max_output_tokens=AGENT_MAX_OUTPUT_TOKENS,
+        ),
         before_model_callback=check_budget_before_model,
         after_model_callback=record_model_usage,
+        on_model_error_callback=clear_invocation_reservation,
         name="trade_agent",
         instruction=SYSTEM_PROMPT,
-        tools=[detect_sell_signals],
+        tools=[detect_current_sell_signals],
     )
 
 
 async def run_trade_agent(player_cards: list[dict]) -> dict:
     """Run the Trade Agent over the full set of player cards for BCNH's roster."""
-    agent = build_trade_agent()
+    agent = build_trade_agent(player_cards)
     session_service = InMemorySessionService()
     runner = Runner(agent=agent, app_name="dynasty_report_cards", session_service=session_service)
 
@@ -173,7 +206,10 @@ async def run_trade_agent(player_cards: list[dict]) -> dict:
     message = genai_types.Content(
         role="user",
         parts=[genai_types.Part(text=(
-            "Find sell candidates on this roster. player_cards_json:\n" + json.dumps(player_cards)
+            "Find sell candidates on this roster. The cards are already "
+            "loaded into the detection tool; for narrative context only, here "
+            "they are without the raw sub-agent detail:\n"
+            + json.dumps(_strip_detail(player_cards))
         ))]
     )
 

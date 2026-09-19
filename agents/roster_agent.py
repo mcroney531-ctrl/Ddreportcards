@@ -21,7 +21,12 @@ from google.adk.runners import Runner
 from google.adk.sessions import InMemorySessionService
 from google.genai import types as genai_types
 
-from agents.usage import check_budget_before_model, record_model_usage
+from agents.usage import (
+    AGENT_MAX_OUTPUT_TOKENS,
+    check_budget_before_model,
+    clear_invocation_reservation,
+    record_model_usage,
+)
 
 # League format: 12-team, superflex (2 QB starts), PPR dynasty.
 BASE_STARTER_SLOTS = {"QB": 1, "RB": 2, "WR": 2, "TE": 1}
@@ -166,8 +171,8 @@ the overall roster grade.
 League format: 12-team, 4-round, SUPERFLEX (2 QB starts), PPR dynasty.
 
 Steps:
-1. Call compute_roster_grade with the player_cards_json you were given, verbatim as a
-   JSON string
+1. Call compute_current_roster_grade. It takes NO arguments — it already has the
+   roster. Do not pass the player cards to it and do not repeat them anywhere.
 2. Use its output (overall_grade, starter_quality_score, positional_breakdown, flags)
    to write the final roster report
 
@@ -190,20 +195,55 @@ Output format — return a JSON object with these exact keys:
 
 # ── Agent + runner ────────────────────────────────────────────────────────────
 
-def build_roster_agent() -> LlmAgent:
+def _strip_detail(cards: list[dict]) -> list[dict]:
+    """The model's copy of the cards, without the raw sub-agent payloads.
+
+    "_detail" carries the situation/production/market agent outputs verbatim.
+    Neither this agent's prompt nor its output contract references them — the
+    narrative is built from positional_breakdown and the per-card grades — so
+    they are dropped from what the model sees. The deterministic function
+    still receives the untouched cards.
+    """
+    return [{k: v for k, v in c.items() if k != "_detail"} for c in cards]
+
+
+def build_roster_agent(player_cards: list[dict]) -> LlmAgent:
+    """The grading tool closes over the roster rather than taking it as an
+    argument.
+
+    It used to be declared as compute_roster_grade(player_cards_json), and the
+    prompt told the model to pass the cards back "verbatim as a JSON string".
+    So the model was paid to retransmit a payload the process already had —
+    about 84KB, roughly 22,600 output tokens, ~$0.34 a call on a 24-player
+    roster — purely so Python could json.loads it again. It is also what made
+    any sane output ceiling impossible: 4096 tokens holds ~15KB, so the tool
+    call itself would have been truncated long before the answer was.
+    """
+    def compute_current_roster_grade() -> dict:
+        """Compute the overall roster grade for the roster under review.
+
+        Takes no arguments: the player cards are already loaded. Call this
+        once, then write the report from what it returns.
+        """
+        return compute_roster_grade(json.dumps(player_cards))
+
     return LlmAgent(
         model=LiteLlm(model="anthropic/claude-sonnet-4-6", api_key=os.getenv("ANTHROPIC_API_KEY")),
+        generate_content_config=genai_types.GenerateContentConfig(
+            max_output_tokens=AGENT_MAX_OUTPUT_TOKENS,
+        ),
         before_model_callback=check_budget_before_model,
         after_model_callback=record_model_usage,
+        on_model_error_callback=clear_invocation_reservation,
         name="roster_agent",
         instruction=SYSTEM_PROMPT,
-        tools=[compute_roster_grade],
+        tools=[compute_current_roster_grade],
     )
 
 
 async def run_roster_agent(player_cards: list[dict]) -> dict:
     """Run the Roster Agent over a full set of player cards for one team."""
-    agent = build_roster_agent()
+    agent = build_roster_agent(player_cards)
     session_service = InMemorySessionService()
     runner = Runner(agent=agent, app_name="dynasty_report_cards", session_service=session_service)
 
@@ -215,8 +255,10 @@ async def run_roster_agent(player_cards: list[dict]) -> dict:
     message = genai_types.Content(
         role="user",
         parts=[genai_types.Part(text=(
-            "Compute the overall roster grade for this team. player_cards_json:\n"
-            + json.dumps(player_cards)
+            "Compute the overall roster grade for this team, then write the "
+            "report. The cards are already loaded into the grading tool; for "
+            "narrative context only, here they are without the raw sub-agent "
+            "detail:\n" + json.dumps(_strip_detail(player_cards))
         ))]
     )
 

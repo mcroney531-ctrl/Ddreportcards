@@ -1,105 +1,152 @@
 """Budget participation for the ADK report agents.
 
 The agents are the expensive path — /report/roster runs the pipeline for every
-skill player on a roster — so they need the same discipline as /chat.
+skill player on a roster, four concurrently — so they hold the same invariant
+as /chat: reserve an upper bound before the provider is called, reconcile to
+actual afterwards.
 
-Two callbacks, doing different jobs:
+  before_model_callback   reserve, atomically, for this specific round
+  after_model_callback    settle that round's reservation to actual usage
+  on_model_error_callback drop the association, leave the money charged
 
-  before_model_callback  a hard PRE-SPEND gate. It runs immediately before
-                         each provider call and refuses to let it happen when
-                         the day's budget is gone or the store is unreachable.
-  after_model_callback   records what the call actually cost, against the same
-                         durable daily key /chat reserves from.
-
-What this is NOT, yet: a reservation. Reserving an upper bound requires an
-explicit output-token ceiling, and these agents currently declare none — see
-AGENT_MAX_OUTPUT_TOKENS below. Until one is chosen, the gate bounds overshoot
-to at most one in-flight call per concurrent pipeline instead of a whole
-report, which is a real improvement but is not the same guarantee /chat has.
-Calling it one would be dishonest.
+There is no optional-import escape hatch and no "log it and carry on" path.
+budget.py is a required runtime dependency now: a process that cannot account
+for spend does not get to spend.
 """
 
 import logging
+import threading
+
+import budget  # required — see module docstring; do NOT wrap in try/except
 
 log = logging.getLogger("gm.agents.usage")
 
-try:
-    import budget
-except Exception:  # noqa: BLE001 — agents must stay runnable without the API
-    budget = None
-
-# Unset on purpose.
+# Measured, not assumed.
 #
-# Measured, not assumed: with max_output_tokens unset, ADK 2.9.2 passes nothing
-# through and LiteLLM 1.101.0 sends max_tokens=128000 to Anthropic. At
-# sonnet-4-6 output pricing that is $1.92 of exposure per agent call, against
-# a largest declared output contract of roughly 378 tokens.
+# With max_output_tokens unset, ADK 2.9.2 passes nothing through and LiteLLM
+# 1.101.0 sends max_tokens=128000 to Anthropic — $1.92 of exposure per round
+# at sonnet-4-6 output pricing. 4096 is more than ten times the largest
+# declared output contract (~378 tokens) and leaves room for a trade response
+# listing several candidates, while cutting that exposure to about $0.061.
 #
-# A pre-call reservation is meaningless without a ceiling, and picking one
-# blind risks truncating an agent's JSON mid-object, which fails json.loads and
-# kills the report. So the number is a deliberate decision, not a default.
-AGENT_MAX_OUTPUT_TOKENS = None
+# This only became a safe number once the roster/trade agents stopped echoing
+# the whole player_cards payload back as a tool argument: that echo ran to
+# ~22,600 output tokens on a 24-player roster, so any ceiling worth having
+# would have truncated the tool call rather than the answer.
+AGENT_MAX_OUTPUT_TOKENS = 4096
 
 
-def _priced_model(llm_request) -> str:
+# Reservations are held per invocation, never in a module global: the roster
+# endpoint runs four synthesis pipelines concurrently, and a shared slot would
+# let one round settle another's reservation.
+_reservations: dict[str, budget.Reservation] = {}
+_lock = threading.Lock()
+
+
+def _invocation_key(callback_context) -> str:
+    for attr in ("invocation_id", "invocation_context", "agent_name"):
+        v = getattr(callback_context, attr, None)
+        if isinstance(v, str) and v:
+            return v
+    return f"ctx-{id(callback_context)}"
+
+
+def _priced_model(obj) -> str:
     """Normalise LiteLLM's identifier to the priced key.
 
-    llm_request.model is 'anthropic/claude-sonnet-4-6' (verified against the
-    installed ADK). Deriving it here beats a second hand-synced constant that
-    can drift away from the agent definitions.
+    llm_request.model is 'anthropic/claude-sonnet-4-6' — verified against the
+    installed ADK — so the key is derived from the request rather than kept in
+    a second constant that can drift from the agent definitions.
     """
-    raw = getattr(llm_request, "model", "") or ""
+    raw = getattr(obj, "model", "") or ""
     return raw.split("/", 1)[-1] if "/" in raw else raw
+
+
+def _request_upper_bound_tokens(llm_request) -> int:
+    """A deliberately conservative input bound for the assembled request.
+
+    No chars/4 estimate: that is a guess, and a guess is not a spend control.
+    This serialises the whole LlmRequest — system instruction, contents, tool
+    declarations, config — and reserves at least one token per UTF-8 byte,
+    plus a fixed allowance for the structural overhead the provider adds
+    around each message and tool definition. One token per byte cannot
+    under-count any real tokenizer on text and JSON.
+    """
+    try:
+        blob = llm_request.model_dump_json(exclude_none=True)
+    except Exception:  # noqa: BLE001
+        blob = repr(getattr(llm_request, "contents", "")) + repr(getattr(llm_request, "config", ""))
+    return len(blob.encode("utf-8")) + 2_000
 
 
 def check_budget_before_model(callback_context, llm_request):
     """ADK before_model_callback. Returning None lets the call proceed.
 
-    Raising stops it. Failures here are NOT swallowed: an accounting system
-    that cannot confirm there is money left must not wave the call through,
-    which is the whole point of failing closed.
+    Raising stops it before the provider is reached — verified against the
+    installed ADK: the exception propagates out through Runner. Nothing here
+    is swallowed; an accounting system that cannot confirm the money is
+    available must not wave the call through.
     """
-    if budget is None:
-        return None
-
     model = _priced_model(llm_request)
-    try:
-        budget.price_of(model)  # unpriced model cannot be costed, so cannot run
-        if not budget.has_room():
-            raise budget.BudgetExhausted(
-                f"Daily spend budget is spent; refusing further {model} calls."
-            )
-    except budget.BudgetUnavailable:
-        log.error("budget store unavailable — refusing agent model call (%s)", model)
-        raise
-    except budget.UnpricedModel:
-        log.error("agent requested unpriced model %r — refusing", model)
-        raise
+    budget.price_of(model)  # unpriced cannot be costed, so cannot run
+
+    reservation = budget.reserve(
+        model,
+        _request_upper_bound_tokens(llm_request),
+        AGENT_MAX_OUTPUT_TOKENS,
+    )
+    with _lock:
+        _reservations[_invocation_key(callback_context)] = reservation
     return None
 
 
 def record_model_usage(callback_context, llm_response):
     """ADK after_model_callback. Accounting only — never alters the response."""
-    if budget is None:
-        return None
+    key = _invocation_key(callback_context)
+    with _lock:
+        reservation = _reservations.pop(key, None)
 
     usage = getattr(llm_response, "usage_metadata", None)
+    if reservation is None:
+        # No reservation to settle — the call should not have happened.
+        log.error("no reservation found for invocation %s; spend may be unrecorded", key)
+        return None
     if usage is None:
-        return None  # streaming partial, or a provider that reports nothing
+        # Streaming partial, or a provider reporting nothing. The reservation
+        # stays charged: something was called, and an unrecorded charge is the
+        # one outcome worse than over-counting.
+        log.warning("no usage reported for invocation %s; leaving reservation charged", key)
+        return None
 
-    model = getattr(llm_response, "model", "") or ""
-    model = model.split("/", 1)[-1] if "/" in model else model
     try:
-        budget.record_actual(
-            model,
+        budget.settle(
+            reservation,
             getattr(usage, "prompt_token_count", 0) or 0,
             getattr(usage, "candidates_token_count", 0) or 0,
         )
-    except Exception:  # noqa: BLE001
-        # Loud, not silent. This used to be `pass`, which meant a store outage
-        # mid-report left every subsequent call unrecorded while the pipeline
-        # carried on spending. The spend is real whether or not it was written
-        # down, so it is logged at error and the pre-call gate on the NEXT call
-        # will fail closed against the unreachable store.
-        log.exception("FAILED to record agent spend for %s — budget is now under-counting", model)
+    except Exception:
+        # Abort, do not continue. Logging and carrying on is not fail-closed:
+        # a write that fails here and a store that recovers before the next
+        # pre-call check would leave this round missing from the ledger while
+        # the pipeline kept spending against a total it no longer matches.
+        log.exception("FAILED to settle agent spend for %s — aborting the run", reservation.model)
+        raise
+    return None
+
+
+def clear_invocation_reservation(callback_context, error=None):
+    """ADK on_model_error_callback.
+
+    Drops the association only. The reservation stays charged, because from
+    here a call that never reached the provider is indistinguishable from one
+    that was generated and billed before the error surfaced.
+    """
+    key = _invocation_key(callback_context)
+    with _lock:
+        reservation = _reservations.pop(key, None)
+    if reservation is not None:
+        log.warning(
+            "model error on invocation %s — leaving %d micro charged (ambiguous failure)",
+            key, reservation.micros,
+        )
     return None

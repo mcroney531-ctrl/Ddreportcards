@@ -20,7 +20,12 @@ from google.adk.runners import Runner
 from google.adk.sessions import InMemorySessionService
 from google.genai import types as genai_types
 
-from agents.usage import check_budget_before_model, record_model_usage
+from agents.usage import (
+    AGENT_MAX_OUTPUT_TOKENS,
+    check_budget_before_model,
+    clear_invocation_reservation,
+    record_model_usage,
+)
 
 from data import sleeper_client, fantasycalc_client
 
@@ -255,8 +260,12 @@ Output format — always return a JSON object with these exact keys:
 def build_situation_agent() -> LlmAgent:
     return LlmAgent(
         model=LiteLlm(model="anthropic/claude-sonnet-4-6", api_key=os.getenv("ANTHROPIC_API_KEY")),
+        generate_content_config=genai_types.GenerateContentConfig(
+            max_output_tokens=AGENT_MAX_OUTPUT_TOKENS,
+        ),
         before_model_callback=check_budget_before_model,
         after_model_callback=record_model_usage,
+        on_model_error_callback=clear_invocation_reservation,
         name="situation_agent",
         instruction=SYSTEM_PROMPT,
         tools=[
