@@ -50,18 +50,18 @@ def _run_in_thread(coro):
 # blobs verbatim.
 
 def _make_tools(sub_results: dict):
-    def evaluate_situation(player_id: str) -> dict:
+    async def evaluate_situation(player_id: str) -> dict:
         """
         Call the Situation Agent to evaluate opportunity for a rostered player.
         Returns opportunity_score (0-100), opportunity_grade (letter), team,
         depth_chart_order, competition breakdown, key_factors, concerns, summary.
         player_id: Sleeper player_id
         """
-        result = _run_in_thread(run_situation_agent(player_id))
+        result = await asyncio.to_thread(_run_in_thread, run_situation_agent(player_id))
         sub_results["situation"] = result
         return result
 
-    def evaluate_production(player_id: str) -> dict:
+    async def evaluate_production(player_id: str) -> dict:
         """
         Call the Production Agent to evaluate on-field production and compute the
         Risk Modifier for a rostered player. Returns production_score (0-100),
@@ -69,11 +69,11 @@ def _make_tools(sub_results: dict):
         injury_chance_pct, aging_risk), key_factors, concerns, summary.
         player_id: Sleeper player_id
         """
-        result = _run_in_thread(run_production_agent(player_id))
+        result = await asyncio.to_thread(_run_in_thread, run_production_agent(player_id))
         sub_results["production"] = result
         return result
 
-    def evaluate_market(
+    async def evaluate_market(
         player_id: str, opportunity_score: int, production_score: int, durability_score: int, aging_risk: str
     ) -> dict:
         """
@@ -84,8 +84,9 @@ def _make_tools(sub_results: dict):
         opportunity_score, production_score: from evaluate_situation/evaluate_production
         durability_score, aging_risk: from evaluate_production's risk_modifier
         """
-        result = _run_in_thread(
-            run_market_agent(player_id, opportunity_score, production_score, durability_score, aging_risk)
+        result = await asyncio.to_thread(
+            _run_in_thread,
+            run_market_agent(player_id, opportunity_score, production_score, durability_score, aging_risk),
         )
         sub_results["market"] = result
         return result
