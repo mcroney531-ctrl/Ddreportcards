@@ -28,10 +28,12 @@ Pipeline endpoints (LLM, seconds–minutes):
 import asyncio
 import datetime
 import json
+import logging
 import os
 import re
 import sys
 import time
+from contextlib import asynccontextmanager
 
 sys.path.insert(0, os.path.dirname(__file__))
 
@@ -42,6 +44,8 @@ from anthropic import Anthropic
 from fastapi import FastAPI, HTTPException, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
+
+log = logging.getLogger("gm.api")
 
 import budget
 import chat_guard
@@ -71,7 +75,63 @@ from dynasty_core.leaguelogs import ATTRIBUTION_HTML, get_espn_id, get_player_bl
 
 LEAGUE_ID: str = LEAGUE["league_id"]
 
-app = FastAPI(title="Dynasty Report Cards API", version="2.0")
+
+def _current_rss_mb() -> float | None:
+    """Current resident set size in MB, read from /proc/self/status. Linux
+    only, which is what Render runs -- no profiling dependency needed for
+    one startup measurement."""
+    try:
+        with open("/proc/self/status") as f:
+            for line in f:
+                if line.startswith("VmRSS:"):
+                    return int(line.split()[1]) / 1024
+    except Exception:  # noqa: BLE001
+        return None
+    return None
+
+
+async def _prewarm_litellm() -> None:
+    """Pay ADK's lazy litellm import cost at startup instead of inside the
+    first real report/chat request.
+
+    google.adk.models.lite_llm._ensure_litellm_imported() is a plain
+    synchronous function -- a bare `import litellm` plus logger setup --
+    that LiteLlm.generate_content_async() calls as its literal first line,
+    before any await. On a cold process, the first real model call pays that
+    cost directly on the event loop, blocking everything else (including
+    /health) for however long the import takes. Calling it here, off the
+    loop via asyncio.to_thread, pays it once at boot instead.
+
+    Raises whatever _ensure_litellm_imported() raises: a process that can't
+    import its own model stack should fail startup, not pretend it warmed.
+    """
+    from google.adk.models.lite_llm import _ensure_litellm_imported
+
+    log.info("litellm_prewarm_start")
+    rss_before = _current_rss_mb()
+    t0 = time.perf_counter()
+    await asyncio.to_thread(_ensure_litellm_imported)
+    duration_ms = (time.perf_counter() - t0) * 1000
+    rss_after = _current_rss_mb()
+    rss_delta = (
+        rss_after - rss_before if rss_before is not None and rss_after is not None else None
+    )
+    log.info(
+        "litellm_prewarm_complete duration_ms=%.1f rss_before_mb=%s rss_after_mb=%s rss_delta_mb=%s",
+        duration_ms,
+        f"{rss_before:.1f}" if rss_before is not None else "unknown",
+        f"{rss_after:.1f}" if rss_after is not None else "unknown",
+        f"{rss_delta:.1f}" if rss_delta is not None else "unknown",
+    )
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    await _prewarm_litellm()
+    yield
+
+
+app = FastAPI(title="Dynasty Report Cards API", version="2.0", lifespan=lifespan)
 
 # The read-only data endpoints stay open — they return public Sleeper and
 # FantasyCalc data and cost nothing to serve. /chat spends an Anthropic key,
