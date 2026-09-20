@@ -90,9 +90,22 @@ app.add_middleware(
 
 @app.get("/health")
 def health() -> dict:
-    """Also the warm-up ping the frontend fires on load, so it must stay cheap.
-    It reports spend and any missing control: a guard that is switched off by
-    an unset env var should be visible somewhere, not assumed to be on."""
+    """Render's liveness probe, polled every few seconds, and the warm-up
+    ping GM Command fires on load and on opening chat — both callers only
+    check for a response, never read the body, so this must answer "is the
+    process alive enough to route traffic" and nothing more. It used to
+    also make two Upstash reads on every hit (via chat_budget/warnings
+    below), which ran that Redis round-trip continuously for as long as
+    the process was up. That diagnostic payload still exists at /health/deep.
+    """
+    return {"status": "ok"}
+
+
+@app.get("/health/deep")
+def health_deep() -> dict:
+    """The rich health payload /health used to return. Not polled by
+    anything — fetched manually, or by a deploy check, when the budget
+    store's reachability or a missing control actually needs verifying."""
     return {
         "status": "ok",
         "chat_budget": chat_guard.budget_status(),
