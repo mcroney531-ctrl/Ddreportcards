@@ -227,6 +227,13 @@ class UpstashBudgetStore:
     REST rather than a Redis driver on purpose: ``httpx`` is already a
     dependency, and there is no connection pool to re-establish every time a
     free-plan service wakes from sleep.
+
+    Holds one persistent ``httpx.Client`` for the store's lifetime rather
+    than using the top-level ``httpx.post()`` shortcut. httpx's docs say
+    that shortcut opens a new connection (and rebuilds its SSL context) on
+    every call instead of reusing a pooled client; Render polls /health
+    every few seconds and each probe issues two of these commands, so that
+    churn ran continuously for as long as the process was up.
     """
 
     durable = True
@@ -239,15 +246,15 @@ class UpstashBudgetStore:
         self._headers = {"Authorization": f"Bearer {token}"}
         self._timeout = timeout
         self._last_error: str | None = None
+        self._client = httpx.Client(headers=self._headers, timeout=self._timeout)
+
+    def close(self) -> None:
+        """Release the persistent connection. Call on process shutdown."""
+        self._client.close()
 
     def _cmd(self, *args) -> object:
         try:
-            r = httpx.post(
-                self._url,
-                headers=self._headers,
-                json=[str(a) for a in args],
-                timeout=self._timeout,
-            )
+            r = self._client.post(self._url, json=[str(a) for a in args])
             r.raise_for_status()
             body = r.json()
         except Exception as exc:  # noqa: BLE001 — every failure is fail-closed
