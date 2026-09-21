@@ -46,6 +46,38 @@ from pydantic import BaseModel
 
 log = logging.getLogger("gm.api")
 
+
+def _configure_gm_logging() -> None:
+    """Give the gm.* logger family (gm.api, gm.budget, gm.agents.usage,
+    gm.chat_guard, ...) a handler, once.
+
+    Plain logging.getLogger("gm.x") calls scattered across modules produce
+    no output on their own: the root logger defaults to WARNING with no
+    handler attached, so every log.info(...) call in this codebase was
+    being silently dropped in production, INFO and DEBUG never reaching
+    Render's log stream at all. Configuring the "gm" parent logger once,
+    here, gives every gm.* child a handler through the standard logging
+    hierarchy (child loggers with no handler of their own propagate up to
+    the nearest ancestor's) without scattering logging.basicConfig() calls
+    through budget.py/chat_guard.py/agents/usage.py individually.
+    propagate=False keeps gm.* records from also reaching the root
+    logger's own handling, so nothing here can print a line twice or
+    interfere with Uvicorn's separate uvicorn/uvicorn.access/uvicorn.error
+    loggers, which live outside the "gm" hierarchy entirely and are
+    untouched by this.
+    """
+    gm_logger = logging.getLogger("gm")
+    if gm_logger.handlers:
+        return  # already configured -- re-importing this module must not double up
+    handler = logging.StreamHandler()
+    handler.setFormatter(logging.Formatter("%(asctime)s %(levelname)s %(name)s: %(message)s"))
+    gm_logger.addHandler(handler)
+    gm_logger.setLevel(logging.INFO)
+    gm_logger.propagate = False
+
+
+_configure_gm_logging()
+
 import budget
 import chat_guard
 import picks as picks_module
@@ -1725,11 +1757,33 @@ async def report_player(sleeper_id: str, request: Request) -> dict:
     except chat_guard.ChatRefused as refused:
         raise HTTPException(status_code=refused.status_code, detail=refused.detail)
     from agents.synthesis_agent import run_synthesis_agent
+
+    t0 = time.perf_counter()
+    rss_before = _current_rss_mb()
+
+    def log_outcome(event: str) -> None:
+        duration_ms = (time.perf_counter() - t0) * 1000
+        rss_after = _current_rss_mb()
+        rss_delta = (
+            rss_after - rss_before if rss_before is not None and rss_after is not None else None
+        )
+        log.info(
+            "%s duration_ms=%.1f rss_before_mb=%s rss_after_mb=%s rss_delta_mb=%s",
+            event,
+            duration_ms,
+            f"{rss_before:.1f}" if rss_before is not None else "unknown",
+            f"{rss_after:.1f}" if rss_after is not None else "unknown",
+            f"{rss_delta:.1f}" if rss_delta is not None else "unknown",
+        )
+
     try:
-        return await run_synthesis_agent(sleeper_id)
+        card = await run_synthesis_agent(sleeper_id)
     except (budget.BudgetExhausted, budget.BudgetUnavailable, budget.UnpricedModel) as exc:
         # Raised by the agent callbacks mid-pipeline, after preflight passed.
+        log_outcome("player_report_failed")
         raise _budget_http_error(exc)
+    log_outcome("player_report_complete")
+    return card
 
 
 @app.post("/report/roster/{owner}")
