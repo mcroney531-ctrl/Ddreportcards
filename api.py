@@ -170,6 +170,142 @@ def health_deep() -> dict:
     }
 
 
+# ── Temporary: Experiment 4 staged memory profiler ──────────────────────────
+# Isolates where the ~130MB persistent RSS jump from a report request comes
+# from: Sleeper/FantasyCalc caches, agent-module imports, or ADK Agent/Runner
+# construction -- all measured with ZERO model calls, before spending a
+# token on Experiment 5. Gated behind an env flag (off by default) plus the
+# same X-GM-Key secret /report uses, on top of that. Remove this endpoint
+# once the experiment is done; it is not meant to ship.
+MEMORY_PROFILE_ENABLED = (os.environ.get("GM_MEMORY_PROFILE_ENABLED") or "").strip() == "1"
+
+
+@app.post("/internal/memory-profile")
+def memory_profile(request: Request) -> dict:
+    if not MEMORY_PROFILE_ENABLED:
+        raise HTTPException(status_code=404, detail="Not Found")
+    try:
+        chat_guard.check_secret(request)
+    except chat_guard.ChatRefused as refused:
+        raise HTTPException(status_code=refused.status_code, detail=refused.detail)
+
+    import gc
+    import threading
+
+    stages: list[dict] = []
+    baseline_mb = _current_rss_mb()
+    prev_mb = baseline_mb
+
+    def checkpoint(name: str) -> None:
+        nonlocal prev_mb
+        rss = _current_rss_mb()
+        stages.append({
+            "stage": name,
+            "rss_mb": round(rss, 1) if rss is not None else None,
+            "delta_from_previous_mb": (
+                round(rss - prev_mb, 1) if rss is not None and prev_mb is not None else None
+            ),
+            "delta_from_baseline_mb": (
+                round(rss - baseline_mb, 1) if rss is not None and baseline_mb is not None else None
+            ),
+        })
+        prev_mb = rss
+
+    checkpoint("0_baseline")
+
+    import dynasty_core.sleeper as sleeper_mod
+    sleeper_prepopulated = sleeper_mod._players_cache is not None
+    checkpoint("1_import_dynasty_core_sleeper")
+
+    all_players = sleeper_mod.get_all_players()
+    sleeper_record_count = len(all_players)
+    checkpoint("2_sleeper_get_all_players")
+
+    gc.collect()
+    checkpoint("3_gc_collect")
+
+    import dynasty_core.fantasycalc as fantasycalc_mod
+    fantasycalc_prepopulated = fantasycalc_mod._default_params_key() in fantasycalc_mod._values_cache
+    checkpoint("4_import_dynasty_core_fantasycalc")
+
+    fc_values = fantasycalc_mod.get_dynasty_values()
+    fantasycalc_record_count = len(fc_values)
+    checkpoint("5_fantasycalc_get_dynasty_values")
+
+    fantasycalc_mod.index_by_sleeper_id_with_redraft_rank(fc_values)
+    checkpoint("6_index_by_sleeper_id_with_redraft_rank")
+
+    gc.collect()
+    checkpoint("7_gc_collect")
+
+    from google.adk.runners import Runner
+    from google.adk.sessions import InMemorySessionService
+
+    import agents.situation_agent as situation_mod
+    checkpoint("8_import_agents_situation_agent")
+
+    situation_agent = situation_mod.build_situation_agent()
+    checkpoint("9_construct_build_situation_agent")
+
+    _svc = InMemorySessionService()
+    _runner = Runner(agent=situation_agent, app_name="dynasty_report_cards", session_service=_svc)
+    checkpoint("10_situation_session_service_and_runner")
+
+    del situation_agent, _svc, _runner
+    gc.collect()
+    checkpoint("11_gc_collect_after_situation")
+
+    import agents.production_agent as production_mod
+    checkpoint("12_import_agents_production_agent")
+
+    production_agent = production_mod.build_production_agent()
+    checkpoint("13_construct_build_production_agent")
+
+    _svc = InMemorySessionService()
+    _runner = Runner(agent=production_agent, app_name="dynasty_report_cards", session_service=_svc)
+    checkpoint("14_production_session_service_and_runner")
+
+    del production_agent, _svc, _runner
+    gc.collect()
+    checkpoint("15_gc_collect_after_production")
+
+    import agents.market_agent as market_mod
+    checkpoint("16_import_agents_market_agent")
+
+    market_agent = market_mod.build_market_agent()
+    _svc = InMemorySessionService()
+    _runner = Runner(agent=market_agent, app_name="dynasty_report_cards", session_service=_svc)
+    checkpoint("17_market_agent_construct_session_runner")
+
+    del market_agent, _svc, _runner
+    gc.collect()
+    checkpoint("18_gc_collect_after_market")
+
+    import agents.synthesis_agent as synthesis_mod
+    checkpoint("19_import_agents_synthesis_agent")
+
+    synthesis_agent = synthesis_mod.build_synthesis_agent({})
+    checkpoint("20_construct_build_synthesis_agent")
+
+    _svc = InMemorySessionService()
+    _runner = Runner(agent=synthesis_agent, app_name="dynasty_report_cards", session_service=_svc)
+    checkpoint("21_synthesis_session_service_and_runner")
+
+    del synthesis_agent, _svc, _runner
+    gc.collect()
+    checkpoint("22_gc_collect_after_synthesis")
+
+    return {
+        "python_version": sys.version,
+        "thread_count": threading.active_count(),
+        "sleeper_cache_prepopulated": sleeper_prepopulated,
+        "sleeper_record_count": sleeper_record_count,
+        "fantasycalc_cache_prepopulated": fantasycalc_prepopulated,
+        "fantasycalc_record_count": fantasycalc_record_count,
+        "stages": stages,
+    }
+
+
 @app.get("/league")
 def league_info() -> dict:
     return dict(LEAGUE)
