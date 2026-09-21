@@ -5,12 +5,14 @@ Sleeper player IDs) returns 410 Gone. This isn't a per-player or per-endpoint
 quirk, so the fix is retiring the active integration everywhere it's wired
 in, not catching 410 at the one call site that happened to crash first.
 
-dynasty_core/leaguelogs.py and data/leaguelogs_client.py are deliberately
-left in place -- they're the shared Dynasty Umbrella copy, and scoutcap may
-still reference them; dead-file deletion is a separate cleanup pass that
-needs cross-repo verification first. These tests only prove Ddreportcards'
-*active* paths (production_agent, api.py's endpoints/chat tools/system
-prompt, app.py's Streamlit UI) no longer call into it.
+dynasty_core/leaguelogs.py and data/leaguelogs_client.py have since been
+deleted (Phase 4C's dead-code map found zero importers anywhere in either
+Ddreportcards or scoutcap, confirmed with a repo-wide grep in each before
+deletion). These tests predate that and were never about the files
+themselves -- they prove Ddreportcards' *active* paths (production_agent,
+api.py's endpoints/chat tools/system prompt, app.py's Streamlit UI) no
+longer call into LeagueLogs, which remains true and worth guarding against
+regressing even with the dead files gone.
 """
 import inspect
 import os
