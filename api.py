@@ -325,6 +325,28 @@ def _response_has_function_call(llm_response) -> bool:
     return any(getattr(p, "function_call", None) is not None for p in parts)
 
 
+def wrap_tool_with_checkpoints(name: str, fn, checkpoint) -> object:
+    """Wrap an ADK tool function with before/after checkpoint calls.
+
+    functools.wraps sets __wrapped__, which inspect.signature() follows by
+    default -- ADK's FunctionTool introspects a tool's real signature to
+    build the schema it sends the model, so a plain (*args, **kwargs)
+    wrapper would erase the parameters the model needs to see, causing it
+    to call the tool with missing/wrong arguments (confirmed against
+    production: this was exactly what made the first Experiment 5 run 500).
+    """
+    import functools
+
+    @functools.wraps(fn)
+    def wrapped(*args, **kwargs):
+        checkpoint(f"tool_{name}_before_call")
+        result = fn(*args, **kwargs)
+        checkpoint(f"tool_{name}_after_call")
+        return result
+
+    return wrapped
+
+
 async def _record_late_checkpoints(baseline_mb: float | None) -> None:
     import gc
     import tracemalloc
@@ -475,20 +497,11 @@ async def memory_profile_agent(request: Request) -> dict:
                 checkpoint(f"round_{round_num}_after_provider_response")
             yield resp
 
-    def _wrap_tool(name, fn):
-        def wrapped(*args, **kwargs):
-            checkpoint(f"tool_{name}_before_call")
-            result = fn(*args, **kwargs)
-            checkpoint(f"tool_{name}_after_call")
-            return result
-        wrapped.__name__ = name
-        return wrapped
-
     usage_mod.check_budget_before_model = instrumented_check_budget_before_model
     usage_mod.record_model_usage = instrumented_record_model_usage
     LiteLlm.generate_content_async = instrumented_generate_content_async
     for name, fn in real_tools.items():
-        setattr(situation_mod, name, _wrap_tool(name, fn))
+        setattr(situation_mod, name, wrap_tool_with_checkpoints(name, fn, checkpoint))
 
     player_id = "12501"
     try:

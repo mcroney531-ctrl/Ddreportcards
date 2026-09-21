@@ -63,6 +63,51 @@ class MemoryProfileAgentGatingTest(unittest.TestCase):
         self.assertEqual(resp.status_code, 401)
 
 
+class WrapToolWithCheckpointsPreservesSignatureTest(unittest.TestCase):
+    """Regression test for the actual production failure on the first
+    Experiment 5 run: a plain (*args, **kwargs) wrapper around a tool
+    function erases the signature ADK's FunctionTool introspects to build
+    the schema sent to the model, so the model calls the tool with the
+    wrong (or no) arguments and the real function raises a TypeError.
+    Confirmed via a real Render 500 with "Dynamic node situation_agent
+    failed" before this fix."""
+
+    def test_wrapped_tool_keeps_the_original_introspectable_signature(self):
+        import inspect
+
+        def lookup_player_situation(player_id: str) -> dict:
+            """Docstring the model needs to see too."""
+            return {"player_id": player_id}
+
+        checkpoints_seen = []
+        wrapped = api.wrap_tool_with_checkpoints(
+            "lookup_player_situation", lookup_player_situation, checkpoints_seen.append
+        )
+
+        self.assertEqual(
+            inspect.signature(wrapped), inspect.signature(lookup_player_situation)
+        )
+        self.assertEqual(wrapped.__doc__, lookup_player_situation.__doc__)
+        self.assertEqual(wrapped.__name__, "lookup_player_situation")
+
+    def test_wrapped_tool_still_calls_through_and_records_checkpoints(self):
+        def get_position_depth(team: str, position: str) -> dict:
+            return {"team": team, "position": position}
+
+        checkpoints_seen = []
+        wrapped = api.wrap_tool_with_checkpoints(
+            "get_position_depth", get_position_depth, checkpoints_seen.append
+        )
+
+        result = wrapped(team="TEN", position="RB")
+
+        self.assertEqual(result, {"team": "TEN", "position": "RB"})
+        self.assertEqual(
+            checkpoints_seen,
+            ["tool_get_position_depth_before_call", "tool_get_position_depth_after_call"],
+        )
+
+
 class ResponseHasFunctionCallTest(unittest.TestCase):
     def test_true_when_a_part_has_a_function_call(self):
         part = mock.Mock(function_call=object())
