@@ -11,7 +11,6 @@ Fast endpoints (no LLM, sub-second):
   GET  /players/trending
   GET  /players/search?q=<name>
   GET  /players/{sleeper_id}
-  GET  /players/{sleeper_id}/blurb
   GET  /roster/{owner}
   GET  /league/rosters/summary
   POST /trade/evaluate
@@ -71,8 +70,6 @@ from dynasty_core.espn import (
     flatten_statistics,
     fantasy_relevant_stats,
 )
-from dynasty_core.leaguelogs import ATTRIBUTION_HTML, get_espn_id, get_player_blurb
-
 LEAGUE_ID: str = LEAGUE["league_id"]
 
 
@@ -479,21 +476,6 @@ def player_news(sleeper_id: str) -> dict:
     }
 
 
-@app.get("/players/{sleeper_id}/blurb")
-def player_blurb(sleeper_id: str) -> dict:
-    """LLM-rewritten 1-3 sentence status note from LeagueLogs — narrative context
-    (role change, injury note, hot/cold streak) beyond raw stats. blurb is null
-    when LeagueLogs has no recent material for the player. Attribution to
-    LeagueLogs is required by their terms whenever this data is displayed."""
-    result = get_player_blurb(sleeper_id)
-    return {
-        "player_id": sleeper_id,
-        "blurb": result.get("blurb") if result else None,
-        "signals": result.get("signals", []) if result else [],
-        "attribution_html": ATTRIBUTION_HTML,
-    }
-
-
 def _current_nfl_season() -> int:
     """The season now in progress, or the last one if we're before kickoff.
     An NFL season is named for the calendar year it starts in."""
@@ -502,12 +484,11 @@ def _current_nfl_season() -> int:
 
 
 def _espn_athlete_id(sleeper_id: str, meta: dict | None = None) -> str | None:
-    """Sleeper -> ESPN athlete id, through three sources.
+    """Sleeper -> ESPN athlete id, through two sources.
 
     Sleeper's espn_id is null for a lot of recent rookies — exactly the
-    players a dynasty manager asks about — so FantasyCalc and LeagueLogs
-    each get a turn. All three coming back empty is a real "no ESPN data"
-    case, not an error.
+    players a dynasty manager asks about — so FantasyCalc gets a turn too.
+    Both coming back empty is a real "no ESPN data" case, not an error.
     """
     if meta is None:
         meta = get_all_players().get(sleeper_id) or {}
@@ -516,11 +497,6 @@ def _espn_athlete_id(sleeper_id: str, meta: dict | None = None) -> str | None:
         try:
             fc = get_value_for_sleeper_id(sleeper_id)
             espn_id = (fc.get("player") or {}).get("espnId") if fc else None
-        except Exception:  # noqa: BLE001
-            espn_id = None
-    if not espn_id:
-        try:
-            espn_id = get_espn_id(sleeper_id)
         except Exception:  # noqa: BLE001
             espn_id = None
     # A missing id has reached ESPN as the literal string "null" before and
@@ -556,7 +532,7 @@ def player_stats(sleeper_id: str, games: int = Query(default=3, ge=1, le=6)) -> 
     if not espn_id:
         out["available"] = False
         out["note"] = (
-            "No ESPN athlete id on file from Sleeper, FantasyCalc or LeagueLogs, so no "
+            "No ESPN athlete id on file from Sleeper or FantasyCalc, so no "
             "stats are available for this player. Say that plainly — do not substitute "
             "an impression of how he has played."
         )
@@ -1217,27 +1193,6 @@ CHAT_TOOLS = [
         },
     },
     {
-        "name": "get_player_blurb",
-        "description": (
-            "Get a short LLM-written narrative blurb about a player from LeagueLogs — context on "
-            "role changes, injury notes, or hot/cold streaks beyond raw stats. Not every player has "
-            "one; blurb will be null if there is no recent material. "
-            "LeagueLogs attribution is required whenever you use this data: if blurb is non-null, "
-            'end your response with a short plain-text attribution line, e.g. "Powered by LeagueLogs (leaguelogs.com)". '
-            "Requires the Sleeper player_id returned by get_player_value."
-        ),
-        "input_schema": {
-            "type": "object",
-            "properties": {
-                "sleeper_id": {
-                    "type": "string",
-                    "description": "Sleeper player ID (the player_id field from get_player_value results)",
-                },
-            },
-            "required": ["sleeper_id"],
-        },
-    },
-    {
         "name": "evaluate_trade",
         "description": (
             "Evaluate a proposed trade using actual FantasyCalc dynasty values — not a guess. "
@@ -1340,8 +1295,6 @@ def _execute_chat_tool(name: str, tool_input: dict, latest_user_text: str = "") 
                 sleeper_id=tool_input.get("sleeper_id", ""),
                 games=min(6, max(1, int(games))),
             )
-        if name == "get_player_blurb":
-            return player_blurb(sleeper_id=tool_input.get("sleeper_id", ""))
         if name == "evaluate_trade":
             a_picks = tool_input.get("team_a_picks") or []
             b_picks = tool_input.get("team_b_picks") or []
@@ -1395,9 +1348,7 @@ CHAT_SYSTEM_PROMPT = (
     "a player can be trending up on hype and have caught two balls. Never infer a performance "
     "from a trend, and never answer \"how did he look last week\" from anything else.\n"
     "4. If a player's team in tool results is null or missing, they are a free agent or out of the league — do not claim they compete with anyone.\n"
-    "5. If you use a non-null blurb from get_player_blurb, end your response with a short plain-text "
-    'attribution line: "Powered by LeagueLogs (leaguelogs.com)" — required by their terms.\n'
-    "6. For any question about whether a trade is fair, call evaluate_trade with the sleeper_ids on "
+    "5. For any question about whether a trade is fair, call evaluate_trade with the sleeper_ids on "
     "each side — never estimate the value delta yourself. If the trade includes draft picks, put "
     "them in team_a_picks/team_b_picks on the correct sides; they are priced and counted. When "
     "ANY asset in the trade has no value on file — an unpriced pick, a player FantasyCalc does "
@@ -1406,7 +1357,7 @@ CHAT_SYSTEM_PROMPT = (
     "you do have and say what they cover, and never supply a value for a missing asset in "
     "either direction or treat one as zero. Never let a partial number stand in for the whole "
     "trade: a surplus that ignores three outgoing picks is not a surplus.\n"
-    "7. get_player_value is a name search, not a single lookup — it can return several different "
+    "6. get_player_value is a name search, not a single lookup — it can return several different "
     "real people who share a name. If the result carries identity_resolved, the question is already "
     "settled: somebody in this league rosters that player, so that is the one meant — use the "
     "player_id and never ask him which player he means. Otherwise results come back ordered by "
@@ -1418,21 +1369,21 @@ CHAT_SYSTEM_PROMPT = (
     "option unless the user specifically asked about him. Ask which player is meant only when the "
     "candidates are genuinely comparable and nothing distinguishes them — not merely because the "
     "name returned more than one row.\n"
-    "8. Before assessing the user's own team — its outlook, its holes, whether it is rebuilding or "
+    "7. Before assessing the user's own team — its outlook, its holes, whether it is rebuilding or "
     "contending, who its best assets are — call get_roster for the user's roster. The roster list in "
     "the system prompt carries names but no values, and get_league_rosters_summary carries values and "
     "counts. Judging the team from those two alone means guessing which name goes with which number, "
     "and that guess will be wrong. Name a player as a top asset only if a tool result actually shows "
     "him at that value.\n"
-    "9. Never state or imply how long a player has been in the league from memory. Every player "
+    "8. Never state or imply how long a player has been in the league from memory. Every player "
     "result carries is_rookie and experience_label — use them verbatim. Only call someone a rookie "
     "when is_rookie is true; a player with experience_label \"2nd NFL season\" was drafted last year "
     "and is not a rookie. This applies to phrases like \"rookie class\", \"your rookies\", and "
     "\"first-year player\" just as much as to the word itself.\n"
-    "10. When the user pushes back with a name you didn't mention, treat it as a gap in what you "
+    "9. When the user pushes back with a name you didn't mention, treat it as a gap in what you "
     "looked up, not a disagreement — look the player up before responding, and correct the earlier "
     "assessment if the data warrants it.\n"
-    "11. Never decide which way a trade runs from sentence order. \"A, B for C, D\" reads as buying "
+    "10. Never decide which way a trade runs from sentence order. \"A, B for C, D\" reads as buying "
     "or selling depending on who is speaking, and guessing wrong inverts the entire verdict. "
     "Roster membership settles it: a player already on the user's roster can only be leaving, and "
     "one who is not can only be arriving. evaluate_trade returns a `direction` field that resolves "
@@ -1440,7 +1391,7 @@ CHAT_SYSTEM_PROMPT = (
     "from both sides are on his roster) your split is wrong: fix it before judging. If it reports "
     "unknown, state which way you read the trade so a wrong reading is visible. Open any trade "
     "verdict by naming what he sends and what he gets, so the direction is never implied.\n"
-    "12. Hold your position until evidence moves it, not until the user pushes back. Two different "
+    "11. Hold your position until evidence moves it, not until the user pushes back. Two different "
     "things can follow a verdict, and they get opposite responses:\n"
     "    NEW INFORMATION — a tool result you had not fetched, a checkable fact he supplies, or a "
     "genuine error of yours (bad arithmetic, wrong depth chart, a player you overlooked). This "
@@ -1455,10 +1406,10 @@ CHAT_SYSTEM_PROMPT = (
     "real cost, and it still does not outweigh X\" is a complete, useful answer. Never open with "
     "\"you're absolutely right\", \"excellent point\", or \"that changes everything\" as a "
     "reflex — earn it or skip it.\n"
-    "13. When a verdict does move, make the move legible: what it was, what it is now, and the one "
+    "12. When a verdict does move, make the move legible: what it was, what it is now, and the one "
     "thing that changed it. He should never have to guess whether you found something new or just "
     "yielded to pressure.\n"
-    "14. Specific factual claims must come from a tool result. Your judgement is the point of this "
+    "13. Specific factual claims must come from a tool result. Your judgement is the point of this "
     "tool and he wants it — but state it as judgement, and keep it separate from fact. These have "
     "NO source available to you, so do not assert them as fact:\n"
     "    - Coaching staff, coordinators, or scheme. Nothing returns them.\n"
@@ -1484,7 +1435,7 @@ CHAT_SYSTEM_PROMPT = (
     "\"I'd guess\", \"worth checking\" — or say you cannot verify it. An honest \"I don't have "
     "his target share\" is worth more to him than a confident number you made up, because he acts "
     "on these.\n"
-    "15. You start every turn with NO tool results. Lookups from earlier in this conversation are "
+    "14. You start every turn with NO tool results. Lookups from earlier in this conversation are "
     "gone — only your own replies and his carry over, and your own earlier message is not a source, "
     "it is just text you wrote. So every number you state this turn — value, positional rank, "
     "30-day trend, depth chart slot, roster membership — has to come from a tool result in THIS "
@@ -1492,7 +1443,7 @@ CHAT_SYSTEM_PROMPT = (
     "call. Never copy a number out of your own earlier message and never reconstruct one from the "
     "shape of the conversation. Doing that is not remembering, it is inventing, and it is how the "
     "same player ends up trending -308 early in a conversation and +121 later in the same one.\n"
-    "16. Draft capital is part of a roster, not a footnote. get_roster returns draft_picks "
+    "15. Draft capital is part of a roster, not a footnote. get_roster returns draft_picks "
     "alongside the players — read it. Never discuss a rebuild, a timeline, or what he has to "
     "trade without knowing what picks he actually holds, and never describe someone else's "
     "picks without calling get_pick_inventory first. When a pick matters to the read, say whose "
@@ -1502,7 +1453,7 @@ CHAT_SYSTEM_PROMPT = (
     "week and nothing has been decided; a pick only has a slot once the season ends. For "
     "seasons beyond the next draft there is no projection at all, so give him the origin "
     "team's standing today and let him judge.\n"
-    "17. The context block the app prepends about players he named is a STARTING POINT, not a "
+    "16. The context block the app prepends about players he named is a STARTING POINT, not a "
     "source. It is resolved from a cached player dictionary that may be hours old, so its team, "
     "depth chart and injury fields can be stale — a live lookup overrides them every time. Its "
     "player_ids ARE reliable; use them instead of searching the name again. Two things never "
@@ -1511,7 +1462,7 @@ CHAT_SYSTEM_PROMPT = (
     "you know about him and flag anything you could not verify, rather than stopping to ask him "
     "which player he meant. He knows who is on his own team; being asked is worse than useless "
     "to him.\n"
-    "18. In season, recent production is usually the most decision-relevant thing you can get, "
+    "17. In season, recent production is usually the most decision-relevant thing you can get, "
     "and it is the thing he has already watched. When he says a player looked good, had a big "
     "week, or is buzzing, call get_player_stats before responding — either it backs him up, in "
     "which case say so with the line, or it does not, which is worth far more to him than "
