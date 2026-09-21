@@ -578,6 +578,158 @@ def memory_profile_agent_late(request: Request) -> dict:
     return dict(_late_memory_checkpoints)
 
 
+# ── Temporary: Experiment 6 -- process-global vs. per-agent Runner setup ────
+# Same gate as Experiments 4/5. Experiment 5 found a ~19.3s / +22.5MB gap
+# between Runner.run_async() starting and the first before_model callback
+# firing, on situation_agent's first invocation in that process. This isolates
+# whether that cost is process-global first-touch (pays once, amortized
+# across a real report's several agents), cached per identical agent/tool set
+# (ADK's FunctionTool declaration cache is keyed partly by the actual function
+# object -- a second situation_agent call would reuse it, a first
+# production_agent call, with different tool functions, would not), or a
+# recurring cost of fresh Runner/session machinery itself.
+#
+# Deliberately pre-model-only: each trial swaps its own module's
+# before_model_callback for one that records the checkpoint and raises a
+# dedicated sentinel, before the agent is ever constructed (the real
+# before_model_callback is resolved by name at build_*_agent() call time, not
+# lazily -- the swap has to land before that call). This makes zero Upstash
+# reservation calls and zero Anthropic calls: the sentinel propagates
+# cleanly out through Runner.run_async() (confirmed against installed ADK --
+# neither _invoke_callback nor _run_callbacks catch anything, matching what
+# agents/usage.py's own check_budget_before_model already relies on), caught
+# only by its own type immediately outside the run loop. Every patched
+# binding is restored in a finally block regardless of what happened inside.
+class _Experiment6Stop(Exception):
+    """Raised from a patched before_model_callback to stop a trial before it
+    reserves budget or reaches the provider."""
+
+
+@app.post("/internal/memory-profile-runner-setup")
+async def memory_profile_runner_setup(request: Request) -> dict:
+    if not MEMORY_PROFILE_ENABLED:
+        raise HTTPException(status_code=404, detail="Not Found")
+    try:
+        chat_guard.check_secret(request)
+    except chat_guard.ChatRefused as refused:
+        raise HTTPException(status_code=refused.status_code, detail=refused.detail)
+
+    import gc
+    import time as time_mod
+
+    from google.adk.runners import Runner
+    from google.adk.sessions import InMemorySessionService
+    from google.genai import types as genai_types
+
+    import agents.situation_agent as situation_mod
+    import agents.production_agent as production_mod
+
+    checkpoints: list[dict] = []
+    t_start = time_mod.perf_counter()
+    baseline_mb = _current_rss_mb()
+    prev_mb = baseline_mb
+    prev_t = t_start
+
+    def checkpoint(name: str) -> None:
+        nonlocal prev_mb, prev_t
+        now = time_mod.perf_counter()
+        rss = _current_rss_mb()
+        checkpoints.append({
+            "stage": name,
+            "rss_mb": round(rss, 1) if rss is not None else None,
+            "delta_from_previous_mb": (
+                round(rss - prev_mb, 1) if rss is not None and prev_mb is not None else None
+            ),
+            "delta_from_baseline_mb": (
+                round(rss - baseline_mb, 1) if rss is not None and baseline_mb is not None else None
+            ),
+            "elapsed_ms_from_previous": round((now - prev_t) * 1000, 1),
+            "elapsed_ms_from_start": round((now - t_start) * 1000, 1),
+        })
+        prev_mb, prev_t = rss, now
+
+    checkpoint("0_profiler_entry")
+    checkpoint("1_agent_modules_imported")
+
+    # ── Cache amortization, measured independently of any agent/Runner ─────
+    sleeper_mod = __import__("dynasty_core.sleeper", fromlist=["get_all_players"])
+    fantasycalc_mod = __import__("dynasty_core.fantasycalc", fromlist=["get_dynasty_values"])
+    checkpoint("2_before_first_cache_fetch")
+
+    sleeper_mod.get_all_players()
+    fantasycalc_mod.get_dynasty_values()
+    gc.collect()
+    checkpoint("3_after_first_cache_fetch")
+
+    sleeper_mod.get_all_players()
+    fantasycalc_mod.get_dynasty_values()
+    gc.collect()
+    checkpoint("4_after_second_cache_fetch")
+
+    # ── Runner-to-before_model trials ───────────────────────────────────────
+    player_id = "12501"
+
+    async def run_trial(trial_key: str, mod, build_agent) -> None:
+        real_callback = mod.check_budget_before_model
+
+        def sentinel_callback(callback_context, llm_request):
+            checkpoint(f"{trial_key}_before_model_callback")
+            raise _Experiment6Stop()
+
+        mod.check_budget_before_model = sentinel_callback
+        agent = session_service = runner = event = message = None
+        try:
+            agent = build_agent()
+            checkpoint(f"{trial_key}_agent_constructed")
+            session_service = InMemorySessionService()
+            runner = Runner(agent=agent, app_name="dynasty_report_cards", session_service=session_service)
+            session_id = f"memprofile_exp6_{trial_key}"
+            await session_service.create_session(
+                app_name="dynasty_report_cards", user_id="user", session_id=session_id
+            )
+            message = genai_types.Content(
+                role="user",
+                parts=[genai_types.Part(text=f"Evaluate the opportunity for player_id {player_id}")],
+            )
+            checkpoint(f"{trial_key}_before_run_async")
+            async for event in runner.run_async(user_id="user", session_id=session_id, new_message=message):
+                pass
+        except _Experiment6Stop:
+            pass
+        finally:
+            mod.check_budget_before_model = real_callback
+            del agent, session_service, runner, event, message
+
+        gc.collect()
+        checkpoint(f"{trial_key}_after_cleanup_gc")
+
+    await run_trial("first_situation", situation_mod, situation_mod.build_situation_agent)
+    await run_trial("second_situation", situation_mod, situation_mod.build_situation_agent)
+    await run_trial("first_production", production_mod, production_mod.build_production_agent)
+
+    def span(from_stage: str, to_stage: str) -> dict:
+        by_stage = {c["stage"]: c for c in checkpoints}
+        return {
+            "elapsed_ms": by_stage[to_stage]["elapsed_ms_from_previous"],
+            "rss_delta_mb": by_stage[to_stage]["delta_from_previous_mb"],
+        }
+
+    return {
+        "player_id": player_id,
+        "python_version": sys.version,
+        "checkpoints": checkpoints,
+        "cache_summary": {
+            "first_fetch": span("2_before_first_cache_fetch", "3_after_first_cache_fetch"),
+            "second_fetch": span("3_after_first_cache_fetch", "4_after_second_cache_fetch"),
+        },
+        "runner_setup_summary": {
+            "first_situation": span("first_situation_before_run_async", "first_situation_before_model_callback"),
+            "second_situation": span("second_situation_before_run_async", "second_situation_before_model_callback"),
+            "first_production": span("first_production_before_run_async", "first_production_before_model_callback"),
+        },
+    }
+
+
 @app.get("/league")
 def league_info() -> dict:
     return dict(LEAGUE)
