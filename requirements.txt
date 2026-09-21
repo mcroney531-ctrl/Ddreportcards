@@ -1,8 +1,8 @@
-google-adk[extensions]
-litellm
-anthropic
-streamlit
-httpx
-python-dotenv
-fastapi
-uvicorn[standard]
+google-adk[extensions]==2.9.2
+litellm==1.102.0
+anthropic==1.7.0
+streamlit==1.64.0
+httpx==0.28.1
+python-dotenv==1.2.3
+fastapi==0.141.1
+uvicorn[standard]==0.53.0

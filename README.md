@@ -52,3 +52,11 @@ python scripts/smoke_production.py
 # Same as above, plus exactly one real, billable /report/player/<id> call.
 python scripts/smoke_production.py --billable-player-report 12501
 ```
+
+Dependency drift check — requirements.txt pins exact versions verified
+against a known-good Render deployment (Phase 4B); this reports whether
+what's actually installed still matches:
+
+```
+python scripts/check_dependency_versions.py
+```
