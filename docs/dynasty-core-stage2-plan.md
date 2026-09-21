@@ -210,18 +210,10 @@ to live in shared code).
    the general form.
 
 3. **`get_player_injury_notes()` vs. `get_nfl_injuries()` — different ESPN
-   endpoints entirely, unverified.**
-   `dynasty_core.espn.get_player_injury_notes(espn_athlete_id, espn_team_id)`
-   goes through `.../teams/{team_id}/injuries`, fetches the whole team's
-   injury feed (paginated), and filters to the one athlete by regex-matching
-   `$ref` URLs. `tools.espn.get_nfl_injuries(espn_athlete_id)` goes through
-   `.../athletes/{id}/injuries` directly — a completely different endpoint
-   that doesn't require knowing the team at all. These may return different
-   data shapes and different completeness for the same player. **Needs
-   live verification against real ESPN responses before any merge
-   decision** — not assumed interchangeable from the names. This plan does
-   not perform that verification (no runtime code is exercised in Stage 2A
-   by design); it is the first item in the migration batches below.
+   endpoints entirely. VERIFIED (Stage 2B Batch 1, §8): not complementary
+   — `get_nfl_injuries`'s endpoint 404s for every athlete tested,
+   functional or not.** See §8.1 for the full evidence and the resulting
+   decision.
 
 4. **`flatten_statistics()` vs. Scout's `get_college_stats()` transform —
    confirmed NOT interchangeable.**
@@ -235,17 +227,10 @@ to live in shared code).
    separately-designed shared transform can be built that preserves its
    exact output contract, which is a real design task, not a batch item.
 
-5. **Sleeper's single-player endpoint — existence/support unverified.**
-   `tools.sleeper.get_player(player_id)` calls `GET /players/nfl/{player_id}`.
-   Sleeper's current published API documentation describes the full
-   `/players/nfl` map and the trending endpoints; it does not document a
-   single-player route as part of the supported surface, and states the
-   full player map as the mechanism for resolving player IDs. Combined with
-   this function having zero callers anywhere in scoutcap today, there is
-   no basis for promoting this specific network call into a shared-core
-   contract. Needs live verification (does the route respond, and with
-   what shape) before any decision — also a migration-batch item, not
-   assumed either way here.
+5. **Sleeper's single-player endpoint — existence/support checked. VERIFIED
+   (Stage 2B Batch 1, §8): the route exists and responds, but its shape
+   disagrees with the trusted full-map entry.** See §8.2. This reinforces,
+   rather than changes, the recommendation not to promote it as-is.
 
 ---
 
@@ -402,15 +387,15 @@ release cycle. Packaging is deferred, not abandoned.
 Revised order — verification first, then additive changes, then the one
 behavior-changing fix, then facade conversion, then packaging:
 
-1. **Live-verify both open questions before anything else proceeds:**
-   - ESPN: compare `get_player_injury_notes`'s and `get_nfl_injuries`'s
-     actual responses for the same real athlete — same data, different
-     completeness, or genuinely different information?
-   - Sleeper: confirm whether `GET /players/nfl/{player_id}` exists and
-     what it returns today, regardless of official documentation status.
-   Report response shapes and semantics. **Neither verification by itself
-   authorizes migration** — it only unblocks the decisions in batches 2 and
-   6 below.
+1. ~~Live-verify both open questions before anything else proceeds~~ —
+   **DONE, Stage 2B Batch 1. See §8 for full findings.** Summary: the ESPN
+   pair is not complementary — `get_nfl_injuries` 404s for every tested
+   athlete and should not be merged with or delegated to from
+   `get_player_injury_notes`; it looks like a live bug in scoutcap's
+   `agents/production_agent.py` path, independent of Stage 2. The Sleeper
+   single-player route exists and responds, but its shape disagrees with
+   the full-map entry, reinforcing the cached-map-lookup recommendation
+   already in this plan.
 2. **Add `get_user`, `get_leagues` to `dynasty_core.sleeper`** — new
    functions, zero risk to existing callers in either app.
 3. **Decide the player-map cache policy (§4.1)** — record the TTL decision
@@ -427,14 +412,137 @@ behavior-changing fix, then facade conversion, then packaging:
    settled: `get_rosters`/`get_users_in_league` become thin
    renames-or-removals, `get_nfl_players` wraps `get_all_players`, and
    `get_traded_picks` is dropped (unused).
-7. **Leave `tools/espn.py` alone**, except for whatever batch 1's ESPN
-   verification concludes about `get_nfl_injuries` — no other function in
-   that file is touched. The NFL Draft object model and college-stats
-   functions are not migration candidates at all, per §4.4 and §6.
-8. **Revisit the installable-package question** only after 1-7 are done and
+7. **Leave `tools/espn.py`'s `get_nfl_injuries` as-is for Stage 2 purposes**
+   (no merge, no delegation — decided, §8.1) but **file it separately as a
+   likely production bug**: it silently reports "no injury history found"
+   for real, currently-injured players because its endpoint 404s. This is
+   an application-correctness fix for whoever owns `agents/production_agent.py`,
+   not a Stage 2 architecture task — flagging it here so it doesn't get
+   lost, not scheduling it as a batch. No other function in `tools/espn.py`
+   is touched. The NFL Draft object model and college-stats functions are
+   not migration candidates at all, per §4.4 and §6.
+8. **Revisit the installable-package question** only after 2-7 are done and
    both apps' test/smoke suites are green against the converged contract —
    with packaging as the intended destination, not an open question.
 
-No batch touches Scout's draft/college ESPN functions beyond the one
-possible `get_nfl_injuries` decision in batch 7, and no batch reuses
+No batch touches Scout's draft/college ESPN functions beyond the
+already-decided `get_nfl_injuries` finding in batch 7, and no batch reuses
 `flatten_statistics` for Scout's college transform.
+
+---
+
+## 8. Stage 2B Batch 1 — Live Provider Verification Findings
+
+Verification only, run against real ESPN and Sleeper responses. No runtime
+code was changed to produce these findings — both checks were made as raw
+HTTP calls replicating the exact URL patterns the two codebases already
+use, from outside either app.
+
+### 8.1 ESPN: `get_player_injury_notes` vs. `get_nfl_injuries`
+
+Three real athletes tested, chosen live from Sleeper's own current
+`injury_status` field rather than picked in advance — two Sleeper currently
+marks `"Out"`, one with no current status:
+
+| Athlete | Team | Sleeper `injury_status` | Team-feed path (`get_player_injury_notes`) | Athlete-history path (`get_nfl_injuries`) |
+|---|---|---|---|---|
+| Jauan Jennings | MIN | Out | **200** — 1 matching entry: `fantasyStatus="QUESTIONABLE"`, `type="Personal"`, `location="Other"`, `detail="Not Specified"`, `returnDate="2026-09-27"` | **404** |
+| Sam Darnold | SEA | Out | **200** — 1 matching entry: `fantasyStatus="QUESTIONABLE"`, `type="Lower Body"`, `detail="Soreness"`, `side="Right"`, `returnDate="2026-09-27"` | **404** |
+| Salvon Ahmed | CHI | (none) | **200** — 0 matching entries (consistent with no current injury) | **404** |
+
+**The athlete-history endpoint (`NFL_BASE/athletes/{id}/injuries`) returned
+404 for all three athletes**, including the two with real, populated
+current entries on the team-feed path. This was tested with the exact same
+`espn_athlete_id` values that worked correctly on the team-feed path for
+the same request, so it isn't an id-resolution problem on this end.
+
+**Answering the four original questions directly:**
+1. Can the athlete endpoint replace the team-feed implementation? **No.**
+   It returned no data for any tested athlete, including confirmed-injured
+   ones.
+2. Does the team feed contain current/status information absent from
+   athlete history? **Yes** — team feed has real, structured entries;
+   athlete-history has nothing to compare, since it never returns 200.
+3. Does athlete history contain old injuries absent from the current team
+   feed? **Unknown, and can't be determined from this data** — an endpoint
+   that 404s for every real athlete never gets the chance to surface
+   historical entries either.
+4. Should both remain separate because they answer different questions?
+   **Reframe: this isn't two valid endpoints answering different
+   questions. One of them (`get_nfl_injuries`'s endpoint) does not appear
+   to return usable data at all**, at least not via this URL pattern for
+   real player ids.
+
+**Architecture decision:** Do not merge, delegate, or treat these as
+interchangeable. `get_player_injury_notes` remains the sole functional
+injury-lookup path. `tools.espn.get_nfl_injuries` is not a Stage 2
+consolidation candidate — it's a separate correctness problem.
+
+**Separately, flagging a likely production bug, outside Stage 2's scope:**
+`get_nfl_injuries` catches its 404 and returns
+`{"espn_id": ..., "injuries": [], "note": "No injury history found"}` —
+a well-formed, plausible-looking response that is indistinguishable from
+"this player has a clean injury history." Since `agents/production_agent.py`
+calls this function, Scout's production-grading agent is currently told
+"no injury history" for players ESPN's own team-feed shows as actively
+`QUESTIONABLE` with a specific injury type and expected return date. This
+is worth its own fix independent of any Stage 2 architecture work — noted
+here so it doesn't get lost, not scheduled as a Stage 2 batch.
+
+**Caveat:** ESPN's Core API is undocumented and hidden; this result could
+in principle reflect a wrong URL shape, a required parameter this plan
+didn't try, or a route that's been deprecated/changed since
+`tools/espn.py` was written, rather than "this was never valid." The
+finding here is "returns 404 for real ids today, consistently, 3 for 3" —
+enough to justify the architecture decision above, but a deeper
+investigation (if the bug fix is picked up) should still check for
+alternate request shapes before concluding the route is gone entirely.
+
+### 8.2 Sleeper: single-player endpoint
+
+Tested `GET /players/nfl/{player_id}` for one known-valid id (Jauan
+Jennings, sleeper id `7049`, the same athlete from §8.1) and one
+deliberately invalid id (`9999999999`), compared against that same
+player's entry in the full `/players/nfl` map fetched in the same session.
+
+| | Valid id (`7049`) | Invalid id (`9999999999`) |
+|---|---|---|
+| HTTP status | 200 | 404 |
+| Body | A player object | `null` |
+| Same field set as full-map entry? | **No** (`same_fields: false`) | N/A |
+| Notable difference | `full_name` is null/absent on the single-player response; it's populated (`"Jauan Jennings"`) on the full-map entry for the same id | Clean `404` + `null` body, no anomaly |
+
+**Conclusion:**
+- **Route exists today** and behaves sensibly at the HTTP-status level (200
+  for a real id, 404 for a fabricated one, no error-body weirdness on the
+  miss).
+- **Behavior is stable-looking, not anomalous**, for the two cases tested —
+  but the response **shape genuinely disagrees** with the full-map entry
+  for the same player, at minimum on `full_name`.
+- **Still effectively undocumented/unsupported as a primary access
+  pattern**: whether or not it's formally documented, its own data doesn't
+  match the shape the rest of both codebases already trust (the full-map
+  entry), so treating it as equivalent would be a mistake regardless of
+  its documentation status.
+
+**Architecture decision:** Unchanged from the prior revision, now backed by
+live evidence rather than a documentation-based inference: do not promote
+this network call into `dynasty_core`. If `get_player(player_id)` is added
+to shared core, it must be `get_all_players().get(str(player_id))` — a
+lookup over the cache both apps already trust — not a second, differently-shaped
+provider call.
+
+### 8.3 What this changes going forward
+
+- Migration batch 1 (verification) is complete; batches 2-5 (additive
+  Sleeper functions, cache-policy decision, cached-map `get_player`,
+  `get_trending` generalization with a compatibility wrapper) are unblocked
+  and can proceed in a future pass.
+- Batch 7's `get_nfl_injuries` question is resolved as "leave alone,
+  file separately as a bug" rather than left open.
+- No change to the packaging conclusion (§6, §7 batch 8): still
+  converge-then-package, unaffected by these findings.
+
+Still no runtime code changed by this section. Ran the offline suite after
+this documentation update: all 91 tests pass (unaffected, as expected for
+a docs-only change).
