@@ -306,6 +306,254 @@ def memory_profile(request: Request) -> dict:
     }
 
 
+# ── Temporary: Experiment 5 -- one real situation_agent execution ───────────
+# Same gate as Experiment 4 (flag + X-GM-Key). Distinguishes Python-object
+# retention from native/allocator/library retention by pairing RSS with
+# tracemalloc at the key boundaries, around exactly one real model
+# execution -- no /report, /chat, or full pipeline. Spends real money (one
+# situation_agent run, same reserve/settle path as production). Callback
+# instrumentation is applied by temporarily swapping module-level function
+# references for the duration of this one request only, then restored in a
+# finally block -- it observes, it does not change, before/after_model
+# callback behavior, tool behavior, or agent prompts/tools/output limits.
+_late_memory_checkpoints: dict = {"status": "no_run_yet"}
+
+
+def _response_has_function_call(llm_response) -> bool:
+    content = getattr(llm_response, "content", None)
+    parts = getattr(content, "parts", None) or []
+    return any(getattr(p, "function_call", None) is not None for p in parts)
+
+
+async def _record_late_checkpoints(baseline_mb: float | None) -> None:
+    import gc
+    import tracemalloc
+
+    def sample(label: str, elapsed_s: int) -> dict:
+        gc.collect()
+        rss = _current_rss_mb()
+        cur, peak = tracemalloc.get_traced_memory()
+        return {
+            "stage": label,
+            "elapsed_seconds_idle": elapsed_s,
+            "rss_mb": round(rss, 1) if rss is not None else None,
+            "delta_from_baseline_mb": (
+                round(rss - baseline_mb, 1) if rss is not None and baseline_mb is not None else None
+            ),
+            "tracemalloc_current_mb": round(cur / 1024 / 1024, 2),
+            "tracemalloc_peak_mb": round(peak / 1024 / 1024, 2),
+        }
+
+    await asyncio.sleep(60)
+    at_60s = sample("16_after_60s_idle", 60)
+    await asyncio.sleep(240)
+    at_300s = sample("17_after_5min_idle", 300)
+    tracemalloc.stop()
+
+    _late_memory_checkpoints.clear()
+    _late_memory_checkpoints.update({"status": "complete", "checkpoints": [at_60s, at_300s]})
+
+
+@app.post("/internal/memory-profile-agent")
+async def memory_profile_agent(request: Request) -> dict:
+    if not MEMORY_PROFILE_ENABLED:
+        raise HTTPException(status_code=404, detail="Not Found")
+    try:
+        chat_guard.check_secret(request)
+    except chat_guard.ChatRefused as refused:
+        raise HTTPException(status_code=refused.status_code, detail=refused.detail)
+
+    import gc
+    import time as time_mod
+    import tracemalloc
+
+    import agents.usage as usage_mod
+    import budget as budget_mod
+    from google.adk.models.lite_llm import LiteLlm
+    from google.adk.runners import Runner
+    from google.adk.sessions import InMemorySessionService
+    from google.genai import types as genai_types
+    import agents.situation_agent as situation_mod
+
+    tracemalloc.start()
+    checkpoints: list[dict] = []
+    model_rounds: list[dict] = []
+    t_start = time_mod.perf_counter()
+    baseline_mb = _current_rss_mb()
+    prev_mb = baseline_mb
+    prev_t = t_start
+    _first_provider_response_seen = {"done": False}
+
+    def checkpoint(name: str, with_tracemalloc: bool = False) -> None:
+        nonlocal prev_mb, prev_t
+        now = time_mod.perf_counter()
+        rss = _current_rss_mb()
+        entry = {
+            "stage": name,
+            "rss_mb": round(rss, 1) if rss is not None else None,
+            "delta_from_previous_mb": (
+                round(rss - prev_mb, 1) if rss is not None and prev_mb is not None else None
+            ),
+            "delta_from_baseline_mb": (
+                round(rss - baseline_mb, 1) if rss is not None and baseline_mb is not None else None
+            ),
+            "elapsed_ms_from_previous": round((now - prev_t) * 1000, 1),
+            "elapsed_ms_from_start": round((now - t_start) * 1000, 1),
+        }
+        if with_tracemalloc:
+            cur, peak = tracemalloc.get_traced_memory()
+            entry["tracemalloc_current_mb"] = round(cur / 1024 / 1024, 2)
+            entry["tracemalloc_peak_mb"] = round(peak / 1024 / 1024, 2)
+        checkpoints.append(entry)
+        prev_mb, prev_t = rss, now
+
+    checkpoint("0_profiler_entry")
+
+    # Stage 1: warm the same two caches Experiment 4 already isolated, so
+    # their cost doesn't bleed into what we're measuring here.
+    sleeper_mod = __import__("dynasty_core.sleeper", fromlist=["get_all_players"])
+    fantasycalc_mod = __import__("dynasty_core.fantasycalc", fromlist=["get_dynasty_values"])
+    sleeper_mod.get_all_players()
+    fantasycalc_mod.get_dynasty_values()
+    checkpoint("1_static_caches_hot")
+
+    # ── Instrumentation: swap module-level references for this request only ──
+    real_check_budget_before_model = usage_mod.check_budget_before_model
+    real_record_model_usage = usage_mod.record_model_usage
+    real_generate_content_async = LiteLlm.generate_content_async
+    real_tools = {
+        name: getattr(situation_mod, name)
+        for name in (
+            "lookup_player_situation",
+            "get_position_depth",
+            "assess_position_competition",
+            "get_trending_sentiment",
+        )
+    }
+
+    def instrumented_check_budget_before_model(callback_context, llm_request):
+        round_num = len(model_rounds) + 1
+        checkpoint(f"round_{round_num}_before_model_callback_entry")
+        result = real_check_budget_before_model(callback_context, llm_request)
+        checkpoint(f"round_{round_num}_after_before_model_callback")
+        return result
+
+    def instrumented_record_model_usage(callback_context, llm_response):
+        round_num = len(model_rounds) + 1
+        key = usage_mod._invocation_key(callback_context)
+        reservation = usage_mod._reservations.get(key)
+        usage = getattr(llm_response, "usage_metadata", None)
+        prompt_tokens = getattr(usage, "prompt_token_count", None) if usage else None
+        output_tokens = getattr(usage, "candidates_token_count", None) if usage else None
+        settled_micros = None
+        if reservation is not None and prompt_tokens is not None and output_tokens is not None:
+            try:
+                settled_micros = budget_mod.usage_cost_micro(reservation.model, prompt_tokens, output_tokens)
+            except Exception:  # noqa: BLE001
+                settled_micros = None
+        model_rounds.append({
+            "round": round_num,
+            "model": reservation.model if reservation else None,
+            "prompt_tokens": prompt_tokens,
+            "output_tokens": output_tokens,
+            "reservation_micros": reservation.micros if reservation else None,
+            "settled_micros": settled_micros,
+            "tool_calls_returned": _response_has_function_call(llm_response),
+        })
+        result = real_record_model_usage(callback_context, llm_response)
+        checkpoint(f"round_{round_num}_after_settlement")
+        return result
+
+    async def instrumented_generate_content_async(self, llm_request, stream: bool = False):
+        round_num = len(model_rounds) + 1
+        checkpoint(f"round_{round_num}_before_provider_call")
+        async for resp in real_generate_content_async(self, llm_request, stream=stream):
+            if not _first_provider_response_seen["done"]:
+                _first_provider_response_seen["done"] = True
+                checkpoint("7_after_first_provider_response", with_tracemalloc=True)
+            else:
+                checkpoint(f"round_{round_num}_after_provider_response")
+            yield resp
+
+    def _wrap_tool(name, fn):
+        def wrapped(*args, **kwargs):
+            checkpoint(f"tool_{name}_before_call")
+            result = fn(*args, **kwargs)
+            checkpoint(f"tool_{name}_after_call")
+            return result
+        wrapped.__name__ = name
+        return wrapped
+
+    usage_mod.check_budget_before_model = instrumented_check_budget_before_model
+    usage_mod.record_model_usage = instrumented_record_model_usage
+    LiteLlm.generate_content_async = instrumented_generate_content_async
+    for name, fn in real_tools.items():
+        setattr(situation_mod, name, _wrap_tool(name, fn))
+
+    player_id = "12501"
+    try:
+        agent = situation_mod.build_situation_agent()
+        checkpoint("2_situation_agent_constructed")
+
+        session_service = InMemorySessionService()
+        runner = Runner(agent=agent, app_name="dynasty_report_cards", session_service=session_service)
+        session_id = f"memprofile_situation_{player_id}"
+        await session_service.create_session(
+            app_name="dynasty_report_cards", user_id="user", session_id=session_id
+        )
+        checkpoint("3_before_runner_run_async", with_tracemalloc=True)
+
+        message = genai_types.Content(
+            role="user",
+            parts=[genai_types.Part(text=f"Evaluate the opportunity for player_id {player_id}")],
+        )
+        result_text = ""
+        event = None
+        async for event in runner.run_async(user_id="user", session_id=session_id, new_message=message):
+            if event.is_final_response() and event.content:
+                for part in event.content.parts:
+                    if part.text:
+                        result_text += part.text
+
+        checkpoint("13_final_agent_response_assembled", with_tracemalloc=True)
+    finally:
+        usage_mod.check_budget_before_model = real_check_budget_before_model
+        usage_mod.record_model_usage = real_record_model_usage
+        LiteLlm.generate_content_async = real_generate_content_async
+        for name, fn in real_tools.items():
+            setattr(situation_mod, name, fn)
+
+    del agent, session_service, runner, event, message
+    checkpoint("14_local_references_dropped")
+
+    gc.collect()
+    checkpoint("15_after_gc_collect", with_tracemalloc=True)
+
+    _late_memory_checkpoints.clear()
+    _late_memory_checkpoints.update({"status": "pending"})
+    asyncio.create_task(_record_late_checkpoints(baseline_mb))
+
+    return {
+        "player_id": player_id,
+        "python_version": sys.version,
+        "result_parsed": bool(result_text and result_text.strip().startswith("{")),
+        "checkpoints": checkpoints,
+        "model_rounds": model_rounds,
+        "late_checkpoints": "pending -- poll GET /internal/memory-profile-agent/late (fires at 60s and 300s idle)",
+    }
+
+
+@app.get("/internal/memory-profile-agent/late")
+def memory_profile_agent_late(request: Request) -> dict:
+    if not MEMORY_PROFILE_ENABLED:
+        raise HTTPException(status_code=404, detail="Not Found")
+    try:
+        chat_guard.check_secret(request)
+    except chat_guard.ChatRefused as refused:
+        raise HTTPException(status_code=refused.status_code, detail=refused.detail)
+    return dict(_late_memory_checkpoints)
+
+
 @app.get("/league")
 def league_info() -> dict:
     return dict(LEAGUE)
