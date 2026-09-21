@@ -14,6 +14,7 @@ budget.py is a required runtime dependency now: a process that cannot account
 for spend does not get to spend.
 """
 
+import asyncio
 import logging
 import threading
 
@@ -79,18 +80,28 @@ def _request_upper_bound_tokens(llm_request) -> int:
     return len(blob.encode("utf-8")) + 2_000
 
 
-def check_budget_before_model(callback_context, llm_request):
+async def check_budget_before_model(callback_context, llm_request):
     """ADK before_model_callback. Returning None lets the call proceed.
 
     Raising stops it before the provider is reached — verified against the
     installed ADK: the exception propagates out through Runner. Nothing here
     is swallowed; an accounting system that cannot confirm the money is
     available must not wave the call through.
+
+    budget.reserve() makes a synchronous HTTP call to Upstash. Calling it
+    directly here would block the whole event loop -- including /health --
+    for that round-trip's duration on every single model round: the same
+    defect class as the original 502 (a plain `def` tool blocking the loop
+    via a synchronous wait), just on the budget path instead of the tool
+    path. asyncio.to_thread keeps it off the loop; ADK awaits this callback
+    cooperatively either way (google.adk.utils._callback_pipeline
+    ._run_callbacks awaits the result whenever it's awaitable).
     """
     model = _priced_model(llm_request)
     budget.price_of(model)  # unpriced cannot be costed, so cannot run
 
-    reservation = budget.reserve(
+    reservation = await asyncio.to_thread(
+        budget.reserve,
         model,
         _request_upper_bound_tokens(llm_request),
         AGENT_MAX_OUTPUT_TOKENS,
@@ -100,8 +111,12 @@ def check_budget_before_model(callback_context, llm_request):
     return None
 
 
-def record_model_usage(callback_context, llm_response):
-    """ADK after_model_callback. Accounting only — never alters the response."""
+async def record_model_usage(callback_context, llm_response):
+    """ADK after_model_callback. Accounting only — never alters the response.
+
+    budget.settle() is likewise a synchronous Upstash call, offloaded the
+    same way and for the same reason as check_budget_before_model's reserve.
+    """
     key = _invocation_key(callback_context)
     with _lock:
         reservation = _reservations.pop(key, None)
@@ -119,7 +134,8 @@ def record_model_usage(callback_context, llm_response):
         return None
 
     try:
-        budget.settle(
+        await asyncio.to_thread(
+            budget.settle,
             reservation,
             getattr(usage, "prompt_token_count", 0) or 0,
             getattr(usage, "candidates_token_count", 0) or 0,
