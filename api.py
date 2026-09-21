@@ -437,11 +437,22 @@ async def memory_profile_agent(request: Request) -> dict:
     fantasycalc_mod = __import__("dynasty_core.fantasycalc", fromlist=["get_dynasty_values"])
     sleeper_mod.get_all_players()
     fantasycalc_mod.get_dynasty_values()
+    # Experiment 4 called gc.collect() between these two fetches and this
+    # checkpoint; without it here, transient GC-reclaimable garbage from the
+    # network/JSON-parse work was inflating this stage's RSS delta relative
+    # to Experiment 4's for what should be the same cache-warming cost.
+    gc.collect()
     checkpoint("1_static_caches_hot")
 
     # ── Instrumentation: swap module-level references for this request only ──
-    real_check_budget_before_model = usage_mod.check_budget_before_model
-    real_record_model_usage = usage_mod.record_model_usage
+    # situation_agent.py does `from agents.usage import check_budget_before_model,
+    # record_model_usage`, which binds those names into situation_agent's OWN
+    # module namespace -- a separate reference from agents.usage's. Patching
+    # agents.usage doesn't touch what build_situation_agent() actually resolves;
+    # the swap has to land on situation_mod itself (confirmed the hard way: the
+    # first real run's model_rounds came back empty because of exactly this).
+    real_check_budget_before_model = situation_mod.check_budget_before_model
+    real_record_model_usage = situation_mod.record_model_usage
     real_generate_content_async = LiteLlm.generate_content_async
     real_tools = {
         name: getattr(situation_mod, name)
@@ -497,8 +508,8 @@ async def memory_profile_agent(request: Request) -> dict:
                 checkpoint(f"round_{round_num}_after_provider_response")
             yield resp
 
-    usage_mod.check_budget_before_model = instrumented_check_budget_before_model
-    usage_mod.record_model_usage = instrumented_record_model_usage
+    situation_mod.check_budget_before_model = instrumented_check_budget_before_model
+    situation_mod.record_model_usage = instrumented_record_model_usage
     LiteLlm.generate_content_async = instrumented_generate_content_async
     for name, fn in real_tools.items():
         setattr(situation_mod, name, wrap_tool_with_checkpoints(name, fn, checkpoint))
@@ -530,8 +541,8 @@ async def memory_profile_agent(request: Request) -> dict:
 
         checkpoint("13_final_agent_response_assembled", with_tracemalloc=True)
     finally:
-        usage_mod.check_budget_before_model = real_check_budget_before_model
-        usage_mod.record_model_usage = real_record_model_usage
+        situation_mod.check_budget_before_model = real_check_budget_before_model
+        situation_mod.record_model_usage = real_record_model_usage
         LiteLlm.generate_content_async = real_generate_content_async
         for name, fn in real_tools.items():
             setattr(situation_mod, name, fn)

@@ -19,7 +19,6 @@ from unittest import mock
 from fastapi.testclient import TestClient
 
 import api
-import agents.usage as usage_mod
 from google.adk.models.lite_llm import LiteLlm
 
 
@@ -108,6 +107,32 @@ class WrapToolWithCheckpointsPreservesSignatureTest(unittest.TestCase):
         )
 
 
+class CallbackNamesLiveOnTheConsumingModuleTest(unittest.TestCase):
+    """Regression test for the empty model_rounds table on the first real
+    Experiment 5 run: situation_agent.py does `from agents.usage import
+    check_budget_before_model, record_model_usage`, which binds separate
+    names into situation_agent's own module -- patching agents.usage alone
+    never reaches what build_situation_agent() actually resolves."""
+
+    def test_situation_agent_module_owns_independent_bindings(self):
+        import agents.situation_agent as situation_mod
+        import agents.usage as usage_mod
+
+        self.assertIs(situation_mod.check_budget_before_model, usage_mod.check_budget_before_model)
+
+        sentinel = object()
+        original = usage_mod.check_budget_before_model
+        try:
+            usage_mod.check_budget_before_model = sentinel
+            self.assertIsNot(
+                situation_mod.check_budget_before_model, sentinel,
+                "patching agents.usage must not be mistaken for patching "
+                "situation_agent's own from-imported binding",
+            )
+        finally:
+            usage_mod.check_budget_before_model = original
+
+
 class ResponseHasFunctionCallTest(unittest.TestCase):
     def test_true_when_a_part_has_a_function_call(self):
         part = mock.Mock(function_call=object())
@@ -126,11 +151,17 @@ class ResponseHasFunctionCallTest(unittest.TestCase):
 
 class InstrumentationRestoredOnFailureTest(unittest.TestCase):
     def test_callbacks_and_tools_restored_after_a_failed_run(self):
-        original_check = usage_mod.check_budget_before_model
-        original_record = usage_mod.record_model_usage
-        original_generate = LiteLlm.generate_content_async
-
         import agents.situation_agent as situation_mod
+
+        # These are patched on situation_agent's own namespace, not
+        # agents.usage's -- see wrap_tool_with_checkpoints' sibling fix for
+        # the callbacks: situation_agent.py imports them via `from
+        # agents.usage import ...`, which binds separate names into its own
+        # module, so that's the reference build_situation_agent() actually
+        # resolves and the one that must be captured/restored here.
+        original_check = situation_mod.check_budget_before_model
+        original_record = situation_mod.record_model_usage
+        original_generate = LiteLlm.generate_content_async
         original_tools = {
             name: getattr(situation_mod, name)
             for name in (
@@ -160,8 +191,8 @@ class InstrumentationRestoredOnFailureTest(unittest.TestCase):
             )
 
         self.assertEqual(resp.status_code, 500)
-        self.assertIs(usage_mod.check_budget_before_model, original_check)
-        self.assertIs(usage_mod.record_model_usage, original_record)
+        self.assertIs(situation_mod.check_budget_before_model, original_check)
+        self.assertIs(situation_mod.record_model_usage, original_record)
         self.assertIs(LiteLlm.generate_content_async, original_generate)
         for name, fn in original_tools.items():
             self.assertIs(getattr(situation_mod, name), fn)
