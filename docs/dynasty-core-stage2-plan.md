@@ -182,22 +182,33 @@ to live in shared code).
 
 1. **`get_all_players()` vs. `get_nfl_players()` — caching, and the TTL
    itself is a decision, not a given.**
-   `dynasty_core.sleeper.get_all_players()` caches the ~14MB player dict for
-   6 hours, module-level. `tools.sleeper.get_nfl_players()`'s docstring says
-   *"Cache locally after first fetch"* but there is no caching code at all —
-   every call re-fetches the full payload. That gap is a real bug to fix
-   either way. But the 6h number itself should not be inherited by default:
-   Sleeper's own guidance is to fetch the full player map sparingly — no
-   more than about once a day is the documented recommendation. Stage 2
-   needs to record an explicit decision here, not assume the existing
-   Ddreportcards number is correct just because it already exists:
-     - keep 6h for Ddreportcards' product-freshness reasons (worth writing
-       down what those reasons actually are), or
-     - move the shared cache toward a 24h TTL (or a manual/scheduled
-       refresh) closer to Sleeper's stated guidance, with Ddreportcards
-       opting into a shorter TTL only if there's a concrete reason it needs
-       fresher data than Scout does.
-   No behavior change happens in this documentation pass either way.
+   `dynasty_core.sleeper.get_all_players()` caches the ~14MB player dict.
+   `tools.sleeper.get_nfl_players()`'s docstring says *"Cache locally after
+   first fetch"* but there is no caching code at all — every call re-fetches
+   the full payload. That gap is a real bug to fix either way, tracked
+   separately from the TTL decision below.
+
+   **DECIDED (Stage 2B Batch 3): 24-hour process-local TTL for the full
+   player catalog.** Sleeper's own documentation for `GET /players/nfl`
+   explicitly says the full map should be fetched sparingly — at most about
+   once a day — and stored client-side rather than re-fetched per lookup;
+   it now also documents filtered `position`/`active` variants as the
+   better option when only a subset is needed. The prior 6h TTL was trying
+   to make one endpoint serve two jobs: stable identity/catalog data and
+   fresher injury/depth-chart metadata. The architecture this decision
+   locks in: `get_all_players()` is a player catalog / identity map, not a
+   live-status feed. Ddreportcards' `injury_status`/`practice_participation`
+   reads out of this map are consumers with the wrong freshness source, not
+   evidence the whole ~14MB catalog should be pulled more often. If a
+   freshness-sensitive consumer later needs sub-24h data, the fix is a
+   smaller filtered-provider primitive alongside the 24h catalog — not a
+   shorter catalog TTL. No such filtered API is introduced in Batch 3.
+
+   Caveat: this is a process-local cache, not a global one — a worker
+   restart clears it and can trigger another full fetch inside 24h. That's
+   accepted for the current single-user deployment footprint; persistent
+   cross-process caching is a separate infrastructure project, not part of
+   this decision.
 
 2. **`get_trending_adds()` vs. `get_trending()` — scope.**
    `dynasty_core`'s version is hardcoded to `type=add`, NFL only.
@@ -401,11 +412,16 @@ behavior-changing fix, then facade conversion, then packaging:
    single-player route exists and responds, but its shape disagrees with
    the full-map entry, reinforcing the cached-map-lookup recommendation
    already in this plan.
-2. **Add `get_user`, `get_leagues` to `dynasty_core.sleeper`** — new
-   functions, zero risk to existing callers in either app.
-3. **Decide the player-map cache policy (§4.1)** — record the TTL decision
-   explicitly (keep 6h with stated rationale, or move toward Sleeper's
-   ~24h guidance) before anything depends on it.
+2. ~~Add `get_user`, `get_leagues` to `dynasty_core.sleeper`~~ —
+   **DONE, Stage 2B Batch 2.** New functions, zero risk to existing callers
+   in either app. Deliberately did not carry forward Scout's stale
+   `get_leagues(..., season="2025")` default; `season` is required in the
+   shared version.
+3. ~~Decide the player-map cache policy (§4.1)~~ — **DONE, Stage 2B
+   Batch 3. See §4.1 for the full decision.** `get_all_players()` moved to
+   a 24-hour process-local TTL, matching Sleeper's stated once-per-day
+   guidance for the full catalog. A filtered/freshness-sensitive primitive
+   is deferred until a concrete consumer needs it.
 4. **Add `get_player` to `dynasty_core.sleeper`** as a cached-map lookup
    (`get_all_players().get(str(player_id))`), not a new network call —
    contingent on batch 3 landing first, since it depends on the shared

@@ -12,9 +12,21 @@ import httpx
 
 BASE_URL = "https://api.sleeper.app/v1"
 
+# get_all_players() is a player catalog / identity map, not a live-status
+# feed. Sleeper's own docs say the full /players/nfl payload should be
+# fetched sparingly -- at most about once a day -- and stored rather than
+# re-fetched per lookup, with filtered position/active variants documented
+# as the better option when only a subset is needed. 24h matches that
+# guidance. This is a process-local cache: a worker restart clears it and
+# can trigger another full fetch inside 24h -- that's accepted for the
+# current single-user deployment footprint, not a claim of enforcing
+# Sleeper's once/day recommendation globally across restarts. A consumer
+# that needs sub-24h freshness (e.g. injury_status, practice_participation,
+# depth-chart fields) should use a smaller filtered-provider primitive
+# instead of shortening this TTL -- none exists yet.
 _players_cache: dict[str, Any] | None = None
 _players_cache_time: float = 0.0
-_PLAYERS_TTL_SECONDS = 6 * 60 * 60
+_PLAYERS_TTL_SECONDS = 24 * 60 * 60
 
 
 def get_user(username: str) -> dict:
@@ -121,7 +133,13 @@ def get_all_trades_all_seasons(league_id: str) -> list[dict]:
 
 
 def get_all_players() -> dict[str, dict]:
-    """Full Sleeper player dictionary keyed by player_id. ~14MB; cached in-process."""
+    """Full Sleeper player catalog keyed by player_id. ~14MB; cached
+    process-local for 24h (see the cache comment above _players_cache).
+
+    This is identity/metadata (name, position, team, college, age, etc.),
+    not a guarantee of real-time injury/practice/depth-chart freshness --
+    those fields are present but can be up to 24h stale.
+    """
     global _players_cache, _players_cache_time
     now = time.time()
     if _players_cache is None or (now - _players_cache_time) > _PLAYERS_TTL_SECONDS:
