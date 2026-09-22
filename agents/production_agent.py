@@ -2,9 +2,13 @@
 Production Agent — evaluates production/talent only, independent of situation,
 for a ROSTERED dynasty player. Adapted from Scout's rookie production_agent:
 college stats are swapped for current + prior NFL season production via ESPN's
-Core API. The Risk Modifier still combines durability (1-5) + injury probability,
-now also folding in an age-curve component (years_exp/age from Sleeper), since a
-rostered veteran's dynasty risk includes "how much window is left."
+Core API. The Risk Modifier combines a current-health/availability score (1-5,
+from Sleeper's live injury/practice status + ESPN's team injury feed) with a
+separately-computed age-curve signal (years_exp/age from Sleeper), since a
+rostered veteran's dynasty risk includes "how much window is left." There is
+no predictive model behind a numeric injury probability, and current
+injury/status evidence does not establish a historical durability record, so
+neither is claimed.
 
 Inputs:  Sleeper player_id
 Outputs: structured production assessment + risk modifier
@@ -191,14 +195,29 @@ Letter grade conversion:
 97-100→A+, 93-96→A, 90-92→A-, 87-89→B+, 83-86→B, 80-82→B-,
 77-79→C+, 73-76→C, 70-72→C-, 67-69→D+, 63-66→D, 60-62→D-, <60→F
 
-Risk Modifier — durability score 1-5 (5 = most durable) and injury chance %,
-now also folding in the age-curve signal (a rostered veteran's dynasty risk
-includes how much productive window is left, not just injury history):
-- 5 / <10%: No injury history, full practice participation, low aging risk
-- 4 / 10-20%: Minor injury history or moderate aging risk, otherwise healthy
-- 3 / 20-35%: Moderate injury history OR high aging risk (past position cliff age)
-- 2 / 35-50%: Recurrent injuries or current significant limitation
-- 1 / >50%: Chronic durability concerns or clearly declining/injured with little window left
+Current Health Score — 1-5 (5 = best), scored ONLY from lookup_player_info's
+current Sleeper injury/practice status and get_injury_notes's current ESPN
+team-feed notes. This is a current-status/availability signal only: it is
+not a historical durability assessment and is not a forecast of future
+injury probability. There is no verified source of historical injury data
+here -- do not infer "no injury history" from its absence, and do not invent
+past injuries. Do not output a numeric injury probability of any kind.
+- 5: No current limitation -- full practice participation, no current
+  injury_status, no current ESPN note
+- 4: Minor current designation (e.g. "Questionable" with a non-structural
+  note) or minor current limitation
+- 3: Meaningful current limitation -- limited practice participation, or a
+  current injury_status/ESPN note suggesting a moderate issue
+- 2: Significant current availability concern -- a significant injury
+  designation (e.g. "IR", "PUP") or a structural issue noted currently
+- 1: Currently unavailable / severe present concern -- out with a
+  serious/structural injury per current status
+
+Aging Risk is a SEPARATE signal, computed by compute_age_curve_signal from
+position-specific age curves. It does not change the meaning of the Current
+Health Score above -- a young, currently-healthy player and an old,
+currently-healthy player can both score 5 on health while differing on
+aging_risk.
 """
 
 SYSTEM_PROMPT = f"""You are the Production Agent for a dynasty fantasy football roster report card tool.
@@ -206,7 +225,8 @@ SYSTEM_PROMPT = f"""You are the Production Agent for a dynasty fantasy football 
 Your job: evaluate a ROSTERED player's on-field PRODUCTION only — completely independent
 of their situation/opportunity (a separate agent handles that). Focus on: NFL production
 volume and efficiency (most recent completed season, with prior-season trend context),
-positional value, and durability (Risk Modifier, including the age-curve signal).
+positional value, current health/availability (Current Health Score), and aging risk
+(career-window signal) — two separate components of the Risk Modifier.
 
 {PRODUCTION_CALIBRATION}
 
@@ -224,7 +244,9 @@ Steps:
 3. Call get_career_production for broader context
 4. Call get_injury_notes for recent injury/status signal
 5. Call compute_age_curve_signal using the player's position/age/years_exp
-6. Combine injury notes + age-curve signal into the Risk Modifier
+6. Score Current Health Score from current Sleeper status + current ESPN injury notes only,
+   per the calibration above. Never output a numeric injury probability. Aging Risk comes
+   straight from compute_age_curve_signal and stays a separate field.
 7. Synthesize all into a Production Grade
 
 CRITICAL — lookup_player_info's espn_id can be null for a player too deep on the roster to
@@ -256,8 +278,7 @@ Output format — always return a JSON object with these exact keys:
   }},
   "trend_note": "One sentence comparing current season to prior season.",
   "risk_modifier": {{
-    "durability_score": 4,
-    "injury_chance_pct": 15,
+    "current_health_score": 4,
     "injury_notes": "Brief description of any relevant recent injury/status notes",
     "aging_risk": "moderate",
     "career_window_note": "entering the typical RB decline window (27-29)"
@@ -265,7 +286,7 @@ Output format — always return a JSON object with these exact keys:
   "production_score": 78,
   "production_grade": "B",
   "key_factors": ["bullet points on what drives the grade"],
-  "concerns": ["any production or durability concerns"],
+  "concerns": ["any production, current-health, or aging concerns"],
   "summary": "Two-sentence plain-English summary of production outlook."
 }}
 """

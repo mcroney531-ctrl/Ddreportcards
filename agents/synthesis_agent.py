@@ -65,8 +65,10 @@ def _make_tools(sub_results: dict):
         """
         Call the Production Agent to evaluate on-field production and compute the
         Risk Modifier for a rostered player. Returns production_score (0-100),
-        production_grade, key_stats, risk_modifier (durability_score 1-5,
-        injury_chance_pct, aging_risk), key_factors, concerns, summary.
+        production_grade, key_stats, risk_modifier (current_health_score 1-5 --
+        a current health/availability signal only, not a historical durability
+        assessment or a forecast of future injury probability -- plus aging_risk),
+        key_factors, concerns, summary.
         player_id: Sleeper player_id
         """
         result = await asyncio.to_thread(_run_in_thread, run_production_agent(player_id))
@@ -74,7 +76,7 @@ def _make_tools(sub_results: dict):
         return result
 
     async def evaluate_market(
-        player_id: str, opportunity_score: int, production_score: int, durability_score: int, aging_risk: str
+        player_id: str, opportunity_score: int, production_score: int, current_health_score: int, aging_risk: str
     ) -> dict:
         """
         Call the Market Agent to compute the player's dynasty Trade Value — a hybrid
@@ -82,11 +84,11 @@ def _make_tools(sub_results: dict):
         scores you pass in) and FantasyCalc's dynasty value consensus.
         player_id: Sleeper player_id
         opportunity_score, production_score: from evaluate_situation/evaluate_production
-        durability_score, aging_risk: from evaluate_production's risk_modifier
+        current_health_score, aging_risk: from evaluate_production's risk_modifier
         """
         result = await asyncio.to_thread(
             _run_in_thread,
-            run_market_agent(player_id, opportunity_score, production_score, durability_score, aging_risk),
+            run_market_agent(player_id, opportunity_score, production_score, current_health_score, aging_risk),
         )
         sub_results["market"] = result
         return result
@@ -101,7 +103,7 @@ SYSTEM_PROMPT = """You are the Synthesis Agent for a dynasty fantasy football ro
 You orchestrate the full per-player evaluation pipeline for one rostered player:
 1. Call evaluate_situation → get Opportunity grade
 2. Call evaluate_production → get Production grade + Risk Modifier
-3. Call evaluate_market, passing opportunity_score, production_score, durability_score,
+3. Call evaluate_market, passing opportunity_score, production_score, current_health_score,
    and aging_risk from steps 1-2 → get Trade Value
 4. Synthesize everything into one player card
 
@@ -122,8 +124,7 @@ Output format — return a JSON object with these exact keys:
   "production_grade": "D+",
   "production_score": 68,
   "risk_modifier": {
-    "durability_score": 2,
-    "injury_chance_pct": 40,
+    "current_health_score": 2,
     "aging_risk": "high",
     "career_window_note": "..."
   },

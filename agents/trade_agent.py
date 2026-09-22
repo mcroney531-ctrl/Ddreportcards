@@ -7,8 +7,8 @@ every team's data, which comes in a later phase).
 
 Three signal types, all computed from the player cards produced by
 synthesis_agent + roster_agent's shared quality_score:
-  - sell_high: risk is rising (low durability or high aging risk) while the
-    market hasn't caught down yet — trade value is still elevated.
+  - sell_high: risk is rising (low current health or high aging risk) while
+    the market hasn't caught down yet — trade value is still elevated.
   - sell_before_drop: opportunity_score trails trade_value_score by a wide
     margin — the market hasn't priced in a declining role yet.
   - positional_surplus: enough real contributors at one position that the
@@ -40,9 +40,9 @@ from agents.usage import (
 from agents.roster_agent import _quality_score, CONTRIBUTOR_THRESHOLD
 
 # Thresholds for each signal type.
-SELL_HIGH_MARKET_FLOOR = 55       # trade_value_score at/above this = "still elevated"
-SELL_HIGH_DURABILITY_MAX = 2       # durability_score <= this = risk rising
-SELL_BEFORE_DROP_GAP = 15          # opportunity_score trailing trade_value_score by this much
+SELL_HIGH_MARKET_FLOOR = 55         # trade_value_score at/above this = "still elevated"
+SELL_HIGH_CURRENT_HEALTH_MAX = 2    # current_health_score <= this = risk rising
+SELL_BEFORE_DROP_GAP = 15           # opportunity_score trailing trade_value_score by this much
 # Superflex bumps the QB surplus bar up since a 2nd/3rd QB has real SF-slot value.
 SURPLUS_MIN_CONTRIBUTORS = {"QB": 3, "RB": 4, "WR": 4, "TE": 3}
 
@@ -70,15 +70,17 @@ def detect_sell_signals(player_cards_json: str) -> dict:
     for c in cards:
         name = c.get("player")
         risk = c.get("risk_modifier", {}) or {}
-        durability = risk.get("durability_score")
+        current_health = risk.get("current_health_score")
         aging_risk = risk.get("aging_risk")
         trade_value_score = c.get("trade_value_score", 0) or 0
         opportunity_score = c.get("opportunity_score", 0) or 0
 
-        risk_rising = (durability is not None and durability <= SELL_HIGH_DURABILITY_MAX) or aging_risk == "high"
+        risk_rising = (
+            current_health is not None and current_health <= SELL_HIGH_CURRENT_HEALTH_MAX
+        ) or aging_risk == "high"
         if risk_rising and trade_value_score >= SELL_HIGH_MARKET_FLOOR:
             _flag(name, "sell_high", (
-                f"durability_score={durability}, aging_risk={aging_risk!r} (risk rising) but "
+                f"current_health_score={current_health}, aging_risk={aging_risk!r} (risk rising) but "
                 f"trade_value_score={trade_value_score} is still elevated (>= {SELL_HIGH_MARKET_FLOOR}) "
                 "— the market hasn't caught down to the risk yet."
             ))
@@ -234,12 +236,12 @@ if __name__ == "__main__":
         {
             "player": "Tony Pollard", "position": "RB",
             "opportunity_score": 72, "production_score": 68, "trade_value_score": 59,
-            "risk_modifier": {"durability_score": 2, "aging_risk": "high"},
+            "risk_modifier": {"current_health_score": 2, "aging_risk": "high"},
         },
         {
             "player": "Kirk Cousins", "position": "QB",
             "opportunity_score": 35, "production_score": 50, "trade_value_score": 55,
-            "risk_modifier": {"durability_score": 4, "aging_risk": "high"},
+            "risk_modifier": {"current_health_score": 4, "aging_risk": "high"},
         },
     ]
     result = asyncio.run(run_trade_agent(sample_cards))

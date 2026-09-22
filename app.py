@@ -377,10 +377,11 @@ elif st.session_state.view == "player":
 
     risk = card.get("risk_modifier", {}) or {}
     st.markdown(
-        f"**Risk Modifier:** Durability {risk.get('durability_score', '—')}/5 · "
-        f"Injury chance {risk.get('injury_chance_pct', '—')}% · "
+        f"**Risk Modifier:** Current health {risk.get('current_health_score', '—')}/5 · "
         f"Aging risk: {risk.get('aging_risk', '—')}"
     )
+    if risk.get("injury_notes"):
+        st.caption(risk["injury_notes"])
     if risk.get("career_window_note"):
         st.caption(risk["career_window_note"])
 

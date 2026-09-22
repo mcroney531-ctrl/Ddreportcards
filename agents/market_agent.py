@@ -76,16 +76,18 @@ def get_market_consensus(player_id: str) -> dict:
 
 
 def compute_proprietary_composite(
-    opportunity_score: int, production_score: int, durability_score: int, aging_risk: str
+    opportunity_score: int, production_score: int, current_health_score: int, aging_risk: str
 ) -> dict:
     """
     Weighted composite (0-100) from our own agents' grades only — no market
     data. This is our independent view of the player's dynasty desirability.
     opportunity_score, production_score: 0-100 from situation_agent/production_agent
-    durability_score: 1-5 from production_agent's risk_modifier
+    current_health_score: 1-5 from production_agent's risk_modifier -- a current
+        health/availability signal only, not a historical durability assessment
+        or a forecast of future injury probability
     aging_risk: 'low' | 'moderate' | 'high' | 'unknown' from production_agent's risk_modifier
     """
-    risk_score = ((durability_score - 1) / 4) * 100
+    risk_score = ((current_health_score - 1) / 4) * 100
     composite = (
         production_score * WEIGHTS["production"]
         + opportunity_score * WEIGHTS["opportunity"]
@@ -184,6 +186,8 @@ deliberately excluded, no public API).
 Tools available:
 - get_market_consensus: player name, FantasyCalc dynasty value, position/overall rank, 30-day trend
 - compute_proprietary_composite: Our own 0-100 composite from Opportunity/Production/Risk
+  (Risk here is fed by current_health_score, a current health/availability signal --
+  not a historical durability assessment or a forecast of future injury probability)
 - blend_with_market: Blends the composite with FantasyCalc's value into one hybrid market value
 
 CRITICAL — the "name" field returned by get_market_consensus is the ONLY source of truth
@@ -194,7 +198,7 @@ Sleeper's internal identifiers and are not something you can reliably infer a na
 Steps:
 1. Call get_market_consensus for the player's FantasyCalc standing
 2. Call compute_proprietary_composite using the opportunity_score, production_score,
-   durability_score, and aging_risk provided to you in the user message
+   current_health_score, and aging_risk provided to you in the user message
 3. Call blend_with_market with the proprietary composite to get the final hybrid market value
 4. Convert the resulting market_percentile into a letter grade using the calibration above
 5. Write a short trend note: is the market moving on this player (trend_30day), and does
@@ -234,7 +238,7 @@ def build_market_agent() -> LlmAgent:
 
 
 async def run_market_agent(
-    player_id: str, opportunity_score: int, production_score: int, durability_score: int, aging_risk: str
+    player_id: str, opportunity_score: int, production_score: int, current_health_score: int, aging_risk: str
 ) -> dict:
     """Run the Market Agent for a given player. Returns parsed JSON output."""
     agent = build_market_agent()
@@ -251,7 +255,7 @@ async def run_market_agent(
         parts=[genai_types.Part(text=(
             f"Evaluate the trade value for player_id {player_id}. "
             f"opportunity_score={opportunity_score}, production_score={production_score}, "
-            f"durability_score={durability_score}, aging_risk={aging_risk!r}."
+            f"current_health_score={current_health_score}, aging_risk={aging_risk!r}."
         ))]
     )
 
@@ -275,5 +279,5 @@ if __name__ == "__main__":
     player_id = sys.argv[1] if len(sys.argv) > 1 else "5967"  # Tony Pollard
     print(f"Running Market Agent for player_id: {player_id}\n")
     # Sample inputs approximating Pollard's situation/production agent outputs
-    result = asyncio.run(run_market_agent(player_id, opportunity_score=72, production_score=68, durability_score=2, aging_risk="high"))
+    result = asyncio.run(run_market_agent(player_id, opportunity_score=72, production_score=68, current_health_score=2, aging_risk="high"))
     print(json.dumps(result, indent=2))

@@ -142,6 +142,30 @@ def run_billable_player_report(base_url: str, secret: str, sleeper_id: str) -> b
         isinstance(card, dict) and "_detail" in card and "raw_output" not in card,
         f"body keys: {list(card) if isinstance(card, dict) else type(card)}",
     )
+
+    risk = card.get("risk_modifier", {}) if isinstance(card, dict) else {}
+    ok &= check(
+        "risk_modifier.current_health_score is present",
+        isinstance(risk, dict) and "current_health_score" in risk,
+        f"risk_modifier keys: {list(risk) if isinstance(risk, dict) else type(risk)}",
+    )
+    ok &= check(
+        "risk_modifier has no injury_chance_pct",
+        isinstance(risk, dict) and "injury_chance_pct" not in risk,
+        f"risk_modifier: {risk}",
+    )
+    ok &= check(
+        "risk_modifier has no durability_score",
+        isinstance(risk, dict) and "durability_score" not in risk,
+        f"risk_modifier: {risk}",
+    )
+    market_detail = (card.get("_detail") or {}).get("market") if isinstance(card, dict) else None
+    ok &= check(
+        "Market stage completed (no error/raw_output fallback in _detail.market)",
+        isinstance(market_detail, dict) and "error" not in market_detail and "raw_output" not in market_detail,
+        f"_detail.market: {market_detail}",
+    )
+
     ok &= check("post-report /health/deep is 200", status_after == 200, f"got {status_after}")
 
     print(f"duration_s={duration_s:.1f}")
