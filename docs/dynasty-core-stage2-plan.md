@@ -334,6 +334,11 @@ thin wrapper around the existing network call — see the next answer.
 `get_user` and `get_leagues` don't exist in `dynasty_core.sleeper` yet, but
 should be added there (they're generic account/league-discovery calls, not
 Scout policy) before `tools/sleeper.py` can become a pure facade for them.
+**Added in Stage 2B Batch 2.** Scout's existing `tools.sleeper.get_leagues`
+hardcodes `season: str = "2025"`, which is already stale — that default is
+not promoted into shared core; `dynasty_core.sleeper.get_leagues` requires
+`season` explicitly, and no "current season" helper was introduced to paper
+over that.
 A single-player `get_player` is also worth adding, but **not** as a
 promotion of Scout's existing `GET /players/nfl/{player_id}` call — that
 endpoint's documented/supported status is unverified (§4.5) and the
@@ -474,9 +479,11 @@ the same request, so it isn't an id-resolution problem on this end.
    real player ids.
 
 **Architecture decision:** Do not merge, delegate, or treat these as
-interchangeable. `get_player_injury_notes` remains the sole functional
-injury-lookup path. `tools.espn.get_nfl_injuries` is not a Stage 2
-consolidation candidate — it's a separate correctness problem.
+interchangeable. `get_player_injury_notes` remains the sole verified
+functional ESPN injury path in this comparison — Sleeper itself already
+supplies current injury/status information via a separate provider.
+`tools.espn.get_nfl_injuries` is not a Stage 2 consolidation candidate —
+it's a separate correctness problem.
 
 **Separately, flagging a likely production bug, outside Stage 2's scope:**
 `get_nfl_injuries` catches its 404 and returns

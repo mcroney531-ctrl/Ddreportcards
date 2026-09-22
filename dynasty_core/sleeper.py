@@ -17,6 +17,18 @@ _players_cache_time: float = 0.0
 _PLAYERS_TTL_SECONDS = 6 * 60 * 60
 
 
+def get_user(username: str) -> dict:
+    resp = httpx.get(f"{BASE_URL}/user/{username}", timeout=15)
+    resp.raise_for_status()
+    return resp.json()
+
+
+def get_leagues(user_id: str, season: str) -> list[dict]:
+    resp = httpx.get(f"{BASE_URL}/user/{user_id}/leagues/nfl/{season}", timeout=15)
+    resp.raise_for_status()
+    return resp.json()
+
+
 def get_league_users(league_id: str) -> list[dict]:
     resp = httpx.get(f"{BASE_URL}/league/{league_id}/users", timeout=15)
     resp.raise_for_status()
