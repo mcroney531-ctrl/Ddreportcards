@@ -82,6 +82,11 @@ reference pattern.
 
 ### `scoutcap tools.sleeper`
 
+> **Historical — pre-Batch-6 audit.** This table records the independent
+> HTTP implementation as it stood before Stage 2B Batch 6. The module is
+> now a pure facade over `dynasty_core.sleeper`; see §5 and §7 batch 6 for
+> its current shape.
+
 | Function | Current callers | Provider/endpoint | Semantics | Caching | Error behavior | Classification |
 |---|---|---|---|---|---|---|
 | `get_user(username)` | `agents/synthesis_agent.py`, `app.py` | `GET /user/{username}` | Resolve a Sleeper username to a user object | None | `raise_for_status()` | SCOUTCAP-SPECIFIC (user/league discovery for onboarding a new league; Ddreportcards hardcodes its one league via `config/dynasty_config.py` and never needs this) |
@@ -300,23 +305,24 @@ dynasty_core/
   fantasycalc.py  (unchanged -- already the target shape)
 
 scoutcap/tools/
-  sleeper.py
-    # Thin facade, matching tools/fantasycalc.py's pattern:
-    from dynasty_core.sleeper import get_user, get_leagues, get_trending, \
-        get_all_players as get_nfl_players
-    # get_player: §4.5's verification and the shared cached-map
-    # implementation are both settled; the facade's existing raw-route
-    # get_player is replaced when this file is converted (Batch 6).
+  sleeper.py  -- pure facade, DONE in Batch 6. No HTTP of its own:
+    #   provider/network primitives -> dynasty_core.sleeper
+    #   compatibility aliases       -> tools.sleeper (existing Scout names,
+    #                                  so no caller changed)
+    #   Scout-specific policy       -> tools.sleeper.search_players
+    from dynasty_core.sleeper import (
+        get_user,
+        get_leagues,                             # season required
+        get_league_rosters as get_rosters,
+        get_league_users as get_users_in_league,
+        get_all_players as get_nfl_players,      # shared 24h cache
+        get_player,                              # cached-map lookup
+        get_trending,
+    )
 
-    # Stays here, Scout-specific policy (position filter is a choice, not
-    # a Sleeper API fact):
+    # Scout-specific policy (position filter and substring matching are
+    # choices, not Sleeper API facts):
     def search_players(name): ...  # composed from get_nfl_players()
-
-    # Thin renames, low value -- may just get deleted in favor of calling
-    # dynasty_core directly, or re-exported under existing names if
-    # call-site churn isn't worth it:
-    get_rosters -> dynasty_core.get_league_rosters
-    get_users_in_league -> dynasty_core.get_league_users
 
   espn.py
     # Stays entirely Scout-owned. Reclassified, not moved: the NFL Draft
@@ -445,10 +451,31 @@ behavior-changing fix, then facade conversion, then packaging:
    `get_trending_adds` is now a compatibility wrapper with an unchanged
    signature and no HTTP of its own, so no Ddreportcards call site changed.
    Neither app facade was touched.
-6. **Convert `tools/sleeper.py` into a pure facade**, once batches 2-5 are
-   settled: `get_rosters`/`get_users_in_league` become thin
-   renames-or-removals, `get_nfl_players` wraps `get_all_players`, and
-   `get_traded_picks` is dropped (unused).
+6. ~~Convert `tools/sleeper.py` into a pure facade~~ — **DONE, Stage 2B
+   Batch 6 (scoutcap).** The module owns no HTTP: provider/network
+   primitives live in `dynasty_core.sleeper`, `tools.sleeper` keeps Scout's
+   existing names as direct aliases (`get_rosters`, `get_users_in_league`,
+   `get_nfl_players`, plus `get_user`, `get_trending`), and
+   `search_players` stays there as Scout-specific policy. No caller changed.
+   Deliberate changes to unused surface, each reconfirmed zero-caller by
+   repo-wide grep first:
+   - stale `get_leagues(..., season="2025")` default removed — the facade
+     re-exports the shared version, which requires `season`;
+   - raw single-player HTTP (`GET /players/nfl/{id}`) removed from the
+     facade — `get_player` is now the shared cached-map lookup;
+   - unused `get_traded_picks` facade entry removed (shared core still
+     owns `dynasty_core.sleeper.get_traded_picks`).
+   Scout now inherits the shared 24h player-catalog cache — previously
+   every `get_nfl_players()` call (and so every `search_players()`)
+   re-fetched the full map uncached.
+
+   **Remaining direct Sleeper HTTP in scoutcap (follow-up debt, not
+   Batch 6 scope):** `app.py`'s `_load_pick_arsenal` still calls
+   `/league/{id}/users` and `/league/{id}/traded_picks` directly with its
+   own `httpx`. Both have shared equivalents (`get_league_users`,
+   `get_traded_picks`); the direct calls also skip `raise_for_status()`,
+   and the helper has its own hardcoded `season="2026"` default. To be
+   handled in the post-convergence audit, before packaging.
 7. **Leave `tools/espn.py`'s `get_nfl_injuries` as-is for Stage 2 purposes**
    (no merge, no delegation — decided, §8.1). The production bug it caused
    was handled as application-correctness work outside Stage 2:
@@ -583,7 +610,7 @@ provider call.
 - Migration batch 1 (verification) is complete; this unblocked batches
   2-5 (additive Sleeper functions, cache-policy decision, cached-map
   `get_player`, `get_trending` generalization with a compatibility
-  wrapper). Batches 2-5 have since landed; see §7 for current status.
+  wrapper). Batches 2-6 have since landed; see §7 for current status.
 - Batch 7's `get_nfl_injuries` question is resolved as "leave alone for
   Stage 2"; the resulting production bug was fixed separately (§7 batch 7).
 - No change to the packaging conclusion (§6, §7 batch 8): still
