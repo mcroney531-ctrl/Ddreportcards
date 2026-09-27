@@ -89,7 +89,7 @@ reference pattern.
 | `get_rosters(league_id)` | `agents/synthesis_agent.py`, `app.py` | `GET /league/{id}/rosters` | Same endpoint as `dynasty_core.get_league_rosters` | None | `raise_for_status()` | COMMON (identical endpoint, different name) |
 | `get_users_in_league(league_id)` | `agents/synthesis_agent.py` | `GET /league/{id}/users` | Same endpoint as `dynasty_core.get_league_users` | None | `raise_for_status()` | COMMON (identical endpoint, different name) |
 | `get_nfl_players()` | `mcp_server.py`, `agents/situation_agent.py`, `agents/synthesis_agent.py`, `app.py` | `GET /players/nfl` | Full player dict | **None — despite a docstring claiming "cache locally after first fetch," there is no caching code.** Every call re-fetches ~5MB. | `raise_for_status()` | COMMON in intent, **semantics disagree — see §4.1** |
-| `get_player(player_id)` | **none found** | `GET /players/nfl/{player_id}` | Single-player lookup, returns `None` on 404 | None | Returns `None` on 404 (only function in either Sleeper module that does this instead of raising) | SCOUTCAP-SPECIFIC, currently **unused**, and **the endpoint's documented/supported status is unverified — see §4.3. Do not promote this as written; see §5.** |
+| `get_player(player_id)` | **none found** | `GET /players/nfl/{player_id}` | Single-player lookup, returns `None` on 404 | None | Returns `None` on 404 (only function in either Sleeper module that does this instead of raising) | SCOUTCAP-SPECIFIC, currently **unused**. The endpoint was verified in Stage 2B Batch 1 (§8.2): it exists and returns 200/404, but its response shape differs from the trusted full-map entry. **Not promoted as written** — shared core's `get_player` (added in Batch 4) is a cached-map lookup instead; this facade function is replaced in Batch 6. |
 | `search_players(name)` | `mcp_server.py`, `agents/production_agent.py`, `agents/situation_agent.py`, `agents/synthesis_agent.py` | Composed (`get_nfl_players` + client-side filter) | Name search, filtered to QB/RB/WR/TE only | Inherits `get_nfl_players`' (non-existent) cache | Propagates | SCOUTCAP-SPECIFIC (Ddreportcards never searches by name — it always has a known `sleeper_id` from a roster) |
 | `get_trending(type, sport, limit)` | `mcp_server.py`, `agents/situation_agent.py`, `agents/synthesis_agent.py` | `GET /players/{sport}/trending/{type}` | Generalized: any type (`add`/`drop`), any sport | None | `raise_for_status()` | COMMON in intent, broader than `dynasty_core`'s add-only, NFL-only version |
 | `get_traded_picks(league_id)` | **none found** (the one grep hit was `dynasty_core/sleeper.py`, an unrelated name match, not a real caller — that module isn't imported anywhere in scoutcap) | `GET /league/{id}/traded_picks` | Same endpoint and shape as `dynasty_core`'s version | None | `raise_for_status()` | COMMON, and currently **unused in scoutcap** |
@@ -124,7 +124,7 @@ own `NFL_BASE`/`CFB_BASE` constants and every function's actual URL:
 | `get_espn_athlete_id(draft_athlete_id, season)` | `agents/production_agent.py` | Cache lookup, falls back to **`GET NFL_BASE/seasons/{season}/draft/athletes/{id}`** + `$ref` dereference | Resolve a draft-specific id to the base ESPN athlete id | Uses the same draft-roster cache | Returns `None` on failure at any step | SCOUTCAP-SPECIFIC — NFL Draft object model, same correction as above |
 | `get_draft_prospect(espn_athlete_id, season)` | **none found** | Cache lookup only (backed by `NFL_BASE`) | Draft capital + basic info | Uses the same draft-roster cache | Returns an `{"error": ...}` dict, never raises | SCOUTCAP-SPECIFIC — NFL Draft object model, currently **unused** |
 | `get_college_stats(espn_athlete_id, season)` | `agents/production_agent.py` | `GET CFB_BASE/.../statistics/0` — **the only function in this file that is actually college-football** | College production stats, career or single-season; output keyed `"<category_abbr>_<stat_abbr>" -> stat["displayValue"]`, filtered to `rush`/`rec`/`gen`/`s` categories | None | Returns `{"error": ...}` dict on 404, `raise_for_status()` otherwise | SCOUTCAP-SPECIFIC — genuinely college-football, and the only function here that is |
-| `get_nfl_injuries(espn_athlete_id)` | `agents/production_agent.py` | `GET NFL_BASE/athletes/{id}/injuries` (**direct per-athlete endpoint**) | Historical injury records for one athlete | None | Returns `{"injuries": [], "note": ...}` on 404 | **Same domain as `dynasty_core.get_player_injury_notes`, but a different ESPN endpoint entirely — see §4.3** |
+| `get_nfl_injuries(espn_athlete_id)` | **none** (was `agents/production_agent.py` + `mcp_server.py`; both removed in scoutcap `a6e9f9c`) | `GET NFL_BASE/athletes/{id}/injuries` (**direct per-athlete endpoint**) | Intended as historical injury records for one athlete; 404s for every real athlete tested (§8.1) | None | Returns `{"injuries": [], "note": ...}` on 404 | **Not a consolidation candidate — see §4.3/§8.1.** Physically present but unused, pending later cleanup/provider forensics |
 | `get_nfl_team(team_ref)` | **none found** | `GET {team_ref}` (`NFL_BASE`) | Resolve a team `$ref` to name/abbreviation | None | `raise_for_status()` (via shared `_get`) | SCOUTCAP-SPECIFIC in current form, currently **unused**; conceptually the inverse of `dynasty_core.team_espn_id` (ref→name vs. abbr→id) |
 
 **Revised architectural boundary for ESPN:**
@@ -260,9 +260,9 @@ dynasty_core/
     get_league_season_chain, get_all_trades_all_seasons,
     get_roster_by_display_name, resolve_roster_players
 
-    # get_all_players: TTL is an explicit decision (§4.1), not carried over
-    # by default. Whatever is decided, Scout's get_nfl_players becomes a
-    # thin wrapper around this rather than staying its own uncached fetch.
+    # get_all_players: 24h process-local catalog cache -- DECIDED in
+    # Batch 3 (§4.1). Scout's get_nfl_players becomes a thin wrapper
+    # around this rather than staying its own uncached fetch.
     get_all_players
 
     # get_trending_adds stays as a compatibility wrapper over the
@@ -276,10 +276,11 @@ dynasty_core/
     # discovery, not Scout policy:
     get_user, get_leagues
 
-    # New, but NOT a promotion of tools.sleeper's existing network call
-    # (§4.5 -- that endpoint is unverified and has zero callers). If added,
-    # implemented as a lookup over the cached map instead, introducing no
-    # new provider dependency:
+    # New, but NOT a promotion of tools.sleeper's existing network call.
+    # That endpoint was verified in Batch 1 (§8.2) -- it exists, but its
+    # shape differs from the trusted full-map entry, and adopting it would
+    # add a second provider contract for the same data. Implemented as a
+    # lookup over the cached map instead -- DONE in Batch 4:
     def get_player(player_id):
         return get_all_players().get(str(player_id))
 
@@ -287,8 +288,8 @@ dynasty_core/
     team_espn_id, get_season_statistics, get_career_statistics,
     get_event_log, flatten_statistics, get_recent_game_logs,
     fantasy_relevant_stats, get_player_injury_notes, get_injury_detail
-    # get_player_injury_notes vs. get_nfl_injuries: HOLD, pending §4.3's
-    # live verification. No merge, no delegation, until that's answered.
+    # get_player_injury_notes vs. get_nfl_injuries: DECIDED in Batch 1
+    # (§8.1) -- no merge, no delegation. get_nfl_injuries's endpoint 404s.
 
   fantasycalc.py  (unchanged -- already the target shape)
 
@@ -297,8 +298,9 @@ scoutcap/tools/
     # Thin facade, matching tools/fantasycalc.py's pattern:
     from dynasty_core.sleeper import get_user, get_leagues, get_trending, \
         get_all_players as get_nfl_players
-    # get_player: only added here if §4.5's verification and the
-    # cached-map implementation above are both settled first.
+    # get_player: §4.5's verification and the shared cached-map
+    # implementation are both settled; the facade's existing raw-route
+    # get_player is replaced when this file is converted (Batch 6).
 
     # Stays here, Scout-specific policy (position filter is a choice, not
     # a Sleeper API fact):
@@ -318,8 +320,8 @@ scoutcap/tools/
     # get_college_stats is Scout-specific because it's genuinely a
     # different sport. No change to any of these five functions.
 
-    # get_nfl_injuries: HOLD, same as dynasty_core side -- no delegation
-    # until §4.3 is verified.
+    # get_nfl_injuries: no delegation (DECIDED, §8.1). No active caller
+    # since scoutcap a6e9f9c; physically present pending later cleanup.
 
     # get_nfl_team: no change, currently unused, no shared-core interaction
     # proposed.
@@ -334,8 +336,8 @@ scoutcap/tools/
 **Which `tools/sleeper.py` functions should become wrappers around existing shared-core functions?**
 `get_rosters` → `dynasty_core.get_league_rosters` (identical endpoint).
 `get_users_in_league` → `dynasty_core.get_league_users` (identical
-endpoint). `get_nfl_players` → `dynasty_core.get_all_players`, once the
-cache-TTL decision in §4.1 is made (not automatically inheriting 6h).
+endpoint). `get_nfl_players` → `dynasty_core.get_all_players`, whose
+cache TTL is now decided (24h process-local, Batch 3, §4.1).
 `get_trending` is already the general form both sides should converge on.
 `get_traded_picks` can be dropped entirely rather than wrapped — it has
 zero callers in scoutcap today. `get_player` is **not** a candidate for a
@@ -351,19 +353,21 @@ not promoted into shared core; `dynasty_core.sleeper.get_leagues` requires
 `season` explicitly, and no "current season" helper was introduced to paper
 over that.
 A single-player `get_player` is also worth adding, but **not** as a
-promotion of Scout's existing `GET /players/nfl/{player_id}` call — that
-endpoint's documented/supported status is unverified (§4.5) and the
-function is currently unused, so there's no basis for blessing it as shared
-contract. If added, it should be implemented deterministically as
-`get_all_players().get(str(player_id))`, inheriting the common cache and
-introducing no new provider dependency.
+promotion of Scout's existing `GET /players/nfl/{player_id}` call. That
+endpoint was verified in Batch 1 (§8.2): it exists and returns 200/404,
+but its response shape differs from the trusted full-map entry, and the
+Scout function is unused — adopting it would mean a second,
+differently-shaped provider contract for data shared core already caches.
+**Added in Stage 2B Batch 4** as `get_all_players().get(str(player_id))`,
+inheriting the common 24h cache and introducing no new provider
+dependency.
 
 **Which Scout ESPN functions can delegate to shared NFL primitives?**
-None with certainty yet. `get_nfl_injuries` is on `NFL_BASE` and looks like
-it overlaps with `get_player_injury_notes`, but per §4.3 that needs
-live-data verification before treating it as a safe delegation — the
-two endpoints are different enough (per-team feed vs. per-athlete history)
-that assuming interchangeability from the names would be a mistake. The
+None. `get_nfl_injuries` is on `NFL_BASE` and looked like it overlapped
+with `get_player_injury_notes`, but Batch 1's live verification (§8.1)
+showed its endpoint 404s for every real athlete tested, so it is not a
+delegation candidate — and it has had no active caller since scoutcap
+`a6e9f9c`. The
 NFL Draft object model functions (`search_draft_prospects`,
 `get_espn_athlete_id`, `get_draft_prospect`) don't delegate to anything in
 `dynasty_core.espn` today because there's no active-roster equivalent of a
@@ -407,8 +411,9 @@ behavior-changing fix, then facade conversion, then packaging:
    **DONE, Stage 2B Batch 1. See §8 for full findings.** Summary: the ESPN
    pair is not complementary — `get_nfl_injuries` 404s for every tested
    athlete and should not be merged with or delegated to from
-   `get_player_injury_notes`; it looks like a live bug in scoutcap's
-   `agents/production_agent.py` path, independent of Stage 2. The Sleeper
+   `get_player_injury_notes`; it exposed a live bug in scoutcap's
+   `agents/production_agent.py` path, since fixed outside Stage 2 (see
+   batch 7 below). The Sleeper
    single-player route exists and responds, but its shape disagrees with
    the full-map entry, reinforcing the cached-map-lookup recommendation
    already in this plan.
@@ -422,10 +427,11 @@ behavior-changing fix, then facade conversion, then packaging:
    a 24-hour process-local TTL, matching Sleeper's stated once-per-day
    guidance for the full catalog. A filtered/freshness-sensitive primitive
    is deferred until a concrete consumer needs it.
-4. **Add `get_player` to `dynasty_core.sleeper`** as a cached-map lookup
-   (`get_all_players().get(str(player_id))`), not a new network call —
-   contingent on batch 3 landing first, since it depends on the shared
-   cache existing.
+4. ~~Add `get_player` to `dynasty_core.sleeper`~~ — **DONE, Stage 2B
+   Batch 4.** A cached-map lookup (`get_all_players().get(str(player_id))`),
+   not a new network call; no raw `/players/nfl/{id}` request anywhere in
+   shared code. No caller migrated yet — Scout's facade `get_player` is
+   replaced in batch 6, and Ddreportcards has no caller for it.
 5. **Generalize `get_trending_adds` → `get_trending`**, keeping
    `get_trending_adds` as a compatibility wrapper so no Ddreportcards call
    site needs to change in this batch.
@@ -434,20 +440,24 @@ behavior-changing fix, then facade conversion, then packaging:
    renames-or-removals, `get_nfl_players` wraps `get_all_players`, and
    `get_traded_picks` is dropped (unused).
 7. **Leave `tools/espn.py`'s `get_nfl_injuries` as-is for Stage 2 purposes**
-   (no merge, no delegation — decided, §8.1) but **file it separately as a
-   likely production bug**: it silently reports "no injury history found"
-   for real, currently-injured players because its endpoint 404s. This is
-   an application-correctness fix for whoever owns `agents/production_agent.py`,
-   not a Stage 2 architecture task — flagging it here so it doesn't get
-   lost, not scheduling it as a batch. No other function in `tools/espn.py`
-   is touched. The NFL Draft object model and college-stats functions are
+   (no merge, no delegation — decided, §8.1). The production bug it caused
+   was handled as application-correctness work outside Stage 2:
+   discovered in Batch 1 (it silently reported "no injury history found"
+   for real, currently-injured players because its endpoint 404s) →
+   false injury-history signal removed from Scout's Production agent and
+   MCP server in scoutcap `a6e9f9c` → fabricated durability/injury-probability
+   semantics corrected in scoutcap `93b64f4` (and the equivalent
+   Ddreportcards fix in `37f986c`). The function remains physically present
+   but unused, pending later cleanup/provider forensics; the active Scout
+   Production/MCP path no longer consumes it. No other function in
+   `tools/espn.py` is touched. The NFL Draft object model and college-stats functions are
    not migration candidates at all, per §4.4 and §6.
 8. **Revisit the installable-package question** only after 2-7 are done and
    both apps' test/smoke suites are green against the converged contract —
    with packaging as the intended destination, not an open question.
 
 No batch touches Scout's draft/college ESPN functions beyond the
-already-decided `get_nfl_injuries` finding in batch 7, and no batch reuses
+already-resolved `get_nfl_injuries` finding in batch 7, and no batch reuses
 `flatten_statistics` for Scout's college transform.
 
 ---
@@ -501,16 +511,19 @@ supplies current injury/status information via a separate provider.
 `tools.espn.get_nfl_injuries` is not a Stage 2 consolidation candidate —
 it's a separate correctness problem.
 
-**Separately, flagging a likely production bug, outside Stage 2's scope:**
+**Production bug found here, since fixed outside Stage 2's scope:**
 `get_nfl_injuries` catches its 404 and returns
 `{"espn_id": ..., "injuries": [], "note": "No injury history found"}` —
 a well-formed, plausible-looking response that is indistinguishable from
-"this player has a clean injury history." Since `agents/production_agent.py`
-calls this function, Scout's production-grading agent is currently told
-"no injury history" for players ESPN's own team-feed shows as actively
-`QUESTIONABLE` with a specific injury type and expected return date. This
-is worth its own fix independent of any Stage 2 architecture work — noted
-here so it doesn't get lost, not scheduled as a Stage 2 batch.
+"this player has a clean injury history." At the time of this
+verification, `agents/production_agent.py` called this function, so
+Scout's production-grading agent was told "no injury history" for players
+ESPN's own team-feed showed as actively `QUESTIONABLE` with a specific
+injury type and expected return date. Resolution: the false
+injury-history signal was removed in scoutcap `a6e9f9c`, and the
+fabricated durability/injury-probability semantics were corrected in
+scoutcap `93b64f4`. The active Scout Production/MCP path no longer consumes
+`get_nfl_injuries`; the function remains physically present but unused.
 
 **Caveat:** ESPN's Core API is undocumented and hidden; this result could
 in principle reflect a wrong URL shape, a required parameter this plan
@@ -557,12 +570,12 @@ provider call.
 
 ### 8.3 What this changes going forward
 
-- Migration batch 1 (verification) is complete; batches 2-5 (additive
-  Sleeper functions, cache-policy decision, cached-map `get_player`,
-  `get_trending` generalization with a compatibility wrapper) are unblocked
-  and can proceed in a future pass.
-- Batch 7's `get_nfl_injuries` question is resolved as "leave alone,
-  file separately as a bug" rather than left open.
+- Migration batch 1 (verification) is complete; this unblocked batches
+  2-5 (additive Sleeper functions, cache-policy decision, cached-map
+  `get_player`, `get_trending` generalization with a compatibility
+  wrapper). Batches 2-4 have since landed; see §7 for current status.
+- Batch 7's `get_nfl_injuries` question is resolved as "leave alone for
+  Stage 2"; the resulting production bug was fixed separately (§7 batch 7).
 - No change to the packaging conclusion (§6, §7 batch 8): still
   converge-then-package, unaffected by these findings.
 

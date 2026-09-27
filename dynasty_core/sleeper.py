@@ -150,6 +150,15 @@ def get_all_players() -> dict[str, dict]:
     return _players_cache
 
 
+def get_player(player_id: str) -> dict | None:
+    """Look up one player from the cached full Sleeper player catalog.
+
+    Uses get_all_players(); does not call Sleeper's differently-shaped
+    /players/nfl/{player_id} endpoint.
+    """
+    return get_all_players().get(str(player_id))
+
+
 def get_trending_adds(lookback_hours: int = 24, limit: int = 25) -> list[dict]:
     resp = httpx.get(
         f"{BASE_URL}/players/nfl/trending/add",
