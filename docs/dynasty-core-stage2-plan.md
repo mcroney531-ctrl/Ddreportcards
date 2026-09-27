@@ -265,12 +265,18 @@ dynasty_core/
     # around this rather than staying its own uncached fetch.
     get_all_players
 
-    # get_trending_adds stays as a compatibility wrapper over the
-    # generalized form -- existing Ddreportcards call sites are untouched:
-    get_trending(type="add", sport="nfl", lookback_hours=24, limit=25)
+    # Generalized trending -- DONE in Batch 5. Final parameter order:
+    #   - type/sport/limit keep Scout's existing generalized surface
+    #     (tools.sleeper.get_trending(type, sport, limit)) positionally,
+    #     so the Batch 6 facade swap can't reinterpret a positional arg;
+    #   - lookback_hours is appended, preserving Ddreportcards' capability.
+    get_trending(type="add", sport="nfl", limit=25, lookback_hours=24)
+
+    # get_trending_adds stays as a compatibility wrapper (same signature,
+    # no HTTP of its own) -- existing Ddreportcards call sites untouched:
     def get_trending_adds(lookback_hours=24, limit=25):
         return get_trending(type="add", sport="nfl",
-                             lookback_hours=lookback_hours, limit=limit)
+                             limit=limit, lookback_hours=lookback_hours)
 
     # New: promoted from tools/sleeper.py -- generic account/league
     # discovery, not Scout policy:
@@ -432,9 +438,13 @@ behavior-changing fix, then facade conversion, then packaging:
    not a new network call; no raw `/players/nfl/{id}` request anywhere in
    shared code. No caller migrated yet — Scout's facade `get_player` is
    replaced in batch 6, and Ddreportcards has no caller for it.
-5. **Generalize `get_trending_adds` → `get_trending`**, keeping
-   `get_trending_adds` as a compatibility wrapper so no Ddreportcards call
-   site needs to change in this batch.
+5. ~~Generalize `get_trending_adds` → `get_trending`~~ — **DONE, Stage 2B
+   Batch 5.** Shared `get_trending(type="add", sport="nfl", limit=25,
+   lookback_hours=24)`: the first three parameters keep Scout's existing
+   positional surface, `lookback_hours` keeps Ddreportcards' capability.
+   `get_trending_adds` is now a compatibility wrapper with an unchanged
+   signature and no HTTP of its own, so no Ddreportcards call site changed.
+   Neither app facade was touched.
 6. **Convert `tools/sleeper.py` into a pure facade**, once batches 2-5 are
    settled: `get_rosters`/`get_users_in_league` become thin
    renames-or-removals, `get_nfl_players` wraps `get_all_players`, and
@@ -573,7 +583,7 @@ provider call.
 - Migration batch 1 (verification) is complete; this unblocked batches
   2-5 (additive Sleeper functions, cache-policy decision, cached-map
   `get_player`, `get_trending` generalization with a compatibility
-  wrapper). Batches 2-4 have since landed; see §7 for current status.
+  wrapper). Batches 2-5 have since landed; see §7 for current status.
 - Batch 7's `get_nfl_injuries` question is resolved as "leave alone for
   Stage 2"; the resulting production bug was fixed separately (§7 batch 7).
 - No change to the packaging conclusion (§6, §7 batch 8): still

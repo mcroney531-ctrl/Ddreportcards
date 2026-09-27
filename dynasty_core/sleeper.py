@@ -159,14 +159,36 @@ def get_player(player_id: str) -> dict | None:
     return get_all_players().get(str(player_id))
 
 
-def get_trending_adds(lookback_hours: int = 24, limit: int = 25) -> list[dict]:
+def get_trending(
+    type: str = "add",
+    sport: str = "nfl",
+    limit: int = 25,
+    lookback_hours: int = 24,
+) -> list[dict]:
+    # type/sport/limit keep scoutcap tools.sleeper.get_trending's positional
+    # order so its facade can swap onto this; lookback_hours is appended.
     resp = httpx.get(
-        f"{BASE_URL}/players/nfl/trending/add",
-        params={"lookback_hours": lookback_hours, "limit": limit},
+        f"{BASE_URL}/players/{sport}/trending/{type}",
+        params={
+            "lookback_hours": lookback_hours,
+            "limit": limit,
+        },
         timeout=15,
     )
     resp.raise_for_status()
     return resp.json()
+
+
+def get_trending_adds(
+    lookback_hours: int = 24,
+    limit: int = 25,
+) -> list[dict]:
+    return get_trending(
+        type="add",
+        sport="nfl",
+        limit=limit,
+        lookback_hours=lookback_hours,
+    )
 
 
 def get_roster_by_display_name(league_id: str, display_name: str) -> dict:
