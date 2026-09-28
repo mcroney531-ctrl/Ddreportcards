@@ -149,16 +149,28 @@ def _run_synthesis(market_result, card_json=None):
         "trade_value_score": 13, "trade_value_grade": "D", "narrative": "synthesis narrative",
     }
 
+    async def fake_situation(*_a):
+        return {"player": "Test RB", "position": "RB", "team": "KC",
+                "opportunity_score": 75, "opportunity_grade": "B+"}
+
+    async def fake_production(*_a):
+        return {"production_score": 80, "production_grade": "B",
+                "risk_modifier": {"current_health_score": 5, "aging_risk": "low"}}
+
     class FakeRunner:
         def __init__(self, *, agent, **_):
             self.agent = agent
 
         async def run_async(self, **_):
+            await _tool(self.agent, "evaluate_situation")()
+            await _tool(self.agent, "evaluate_production")()
             if market_result is not None:
-                await _tool(self.agent, "evaluate_market")("p1", 75, 80, 5, "low")
+                await _tool(self.agent, "evaluate_market")()
             yield _event(json.dumps(card_json))
 
-    with mock.patch.object(synthesis_agent, "run_market_agent", fake_market), \
+    with mock.patch.object(synthesis_agent, "run_situation_agent", fake_situation), \
+         mock.patch.object(synthesis_agent, "run_production_agent", fake_production), \
+         mock.patch.object(synthesis_agent, "run_market_agent", fake_market), \
          mock.patch.object(synthesis_agent, "Runner", FakeRunner):
         return asyncio.run(synthesis_agent.run_synthesis_agent("p1"))
 

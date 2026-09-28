@@ -19,7 +19,7 @@ Inputs:  Sleeper player_id
 Outputs: structured production assessment + risk modifier
 """
 
-import os, sys, json, re, datetime
+import os, sys, json, re, datetime, functools
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 
 from dotenv import load_dotenv
@@ -280,7 +280,8 @@ Steps:
 2. Call get_current_season_production and get_prior_season_production to see the trend
 3. Call get_career_production for broader context
 4. Call get_injury_notes for recent injury/status signal
-5. Call compute_age_curve_signal using the player's position/age/years_exp
+5. Call compute_age_curve_signal using the player's position/age/years_exp (code re-derives
+   aging_risk/career_window_note from lookup_player_info's result; report them as returned)
 6. Score Current Health Score from current Sleeper status + current ESPN injury notes only,
    per the calibration above. Never output a numeric injury probability. Aging Risk comes
    straight from compute_age_curve_signal and stays a separate field.
@@ -333,7 +334,40 @@ season currently being played:
 
 # ── Agent + runner ────────────────────────────────────────────────────────────
 
-def build_production_agent() -> LlmAgent:
+def _capturing_lookup(capture: dict):
+    """lookup_player_info, recording each result by player_id so the run can
+    recompute the aging signal from the actual lookup. Same name, docstring
+    and schema for ADK."""
+    @functools.wraps(lookup_player_info)
+    def wrapped(player_id: str) -> dict:
+        result = lookup_player_info(player_id)
+        capture.setdefault("lookup", {})[str(player_id)] = result
+        return result
+    return wrapped
+
+
+def _apply_deterministic_aging(result: dict, capture: dict, player_id: str) -> dict:
+    """Set risk_modifier.aging_risk / career_window_note from
+    compute_age_curve_signal on the captured lookup_player_info result for this
+    player_id — never from the model's copy, or from a model-supplied age or
+    position. current_health_score and injury_notes stay model-authored.
+    Fails with {"error": ...} if the lookup never ran for this player or
+    returned an error."""
+    lookup = (capture.get("lookup") or {}).get(str(player_id))
+    if not lookup:
+        return {"error": f"production evaluation incomplete: lookup_player_info did not run for player_id {player_id}"}
+    if "error" in lookup:
+        return {"error": f"production evaluation failed: {lookup['error']}"}
+    signal = compute_age_curve_signal(lookup.get("position"), lookup.get("age"), lookup.get("years_exp"))
+    risk = result.get("risk_modifier")
+    if not isinstance(risk, dict):
+        risk = result["risk_modifier"] = {}
+    risk["aging_risk"] = signal["aging_risk"]
+    risk["career_window_note"] = signal.get("career_window_note") or signal.get("note")
+    return result
+
+
+def build_production_agent(capture: dict | None = None) -> LlmAgent:
     return LlmAgent(
         model=LiteLlm(model="anthropic/claude-sonnet-4-6", api_key=os.getenv("ANTHROPIC_API_KEY")),
         generate_content_config=genai_types.GenerateContentConfig(
@@ -345,7 +379,7 @@ def build_production_agent() -> LlmAgent:
         name="production_agent",
         instruction=SYSTEM_PROMPT,
         tools=[
-            lookup_player_info,
+            _capturing_lookup(capture) if capture is not None else lookup_player_info,
             get_current_season_production,
             get_prior_season_production,
             get_career_production,
@@ -356,8 +390,11 @@ def build_production_agent() -> LlmAgent:
 
 
 async def run_production_agent(player_id: str) -> dict:
-    """Run the Production Agent for a given Sleeper player_id. Returns parsed JSON output."""
-    agent = build_production_agent()
+    """Run the Production Agent for a given Sleeper player_id. Returns parsed JSON
+    output with the aging signal set in code (see _apply_deterministic_aging),
+    or {"error": ...}."""
+    capture: dict = {}
+    agent = build_production_agent(capture)
     session_service = InMemorySessionService()
     runner = Runner(agent=agent, app_name="dynasty_report_cards", session_service=session_service)
 
@@ -382,7 +419,7 @@ async def run_production_agent(player_id: str) -> dict:
 
     json_match = re.search(r'\{.*\}', result_text, re.DOTALL)
     if json_match:
-        return json.loads(json_match.group())
+        return _apply_deterministic_aging(json.loads(json_match.group()), capture, player_id)
     return {"raw_output": result_text}
 
 

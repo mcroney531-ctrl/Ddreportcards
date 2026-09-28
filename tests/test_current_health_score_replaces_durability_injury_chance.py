@@ -111,13 +111,15 @@ class CurrentHealthScoreFlowsProductionToSynthesisToMarketTest(unittest.TestCase
         self.assertIn("not a forecast of future injury probability", collapsed)
         self.assertIn("not a historical durability assessment", collapsed)
 
-    def test_synthesis_agent_evaluate_market_tool_takes_current_health_score(self):
-        sub_results: dict = {}
-        tools = synthesis_agent._make_tools(sub_results)
+    def test_synthesis_agent_evaluate_market_feeds_current_health_score(self):
+        # Stage 3C.7: evaluate_market takes no arguments; it reads
+        # current_health_score from the Production result's risk_modifier.
+        tools = synthesis_agent._make_tools({}, "p1")
         evaluate_market = next(t for t in tools if t.__name__ == "evaluate_market")
-        params = inspect.signature(evaluate_market).parameters
-        self.assertIn("current_health_score", params)
-        self.assertNotIn("durability_score", params)
+        self.assertEqual(list(inspect.signature(evaluate_market).parameters), [])
+        source = inspect.getsource(synthesis_agent._market_inputs)
+        self.assertIn("current_health_score", source)
+        self.assertNotIn("durability_score", source)
 
     def test_synthesis_agent_prompt_uses_current_health_score(self):
         self.assertIn("current_health_score", synthesis_agent.SYSTEM_PROMPT)

@@ -45,7 +45,7 @@ class ToolFunctionsAreAsyncTest(unittest.TestCase):
         # FunctionTool._invoke_callable) when this is true. A plain `def`
         # tool is instead called synchronously on the event loop -- the
         # exact defect this file guards against being reintroduced.
-        evaluate_situation, evaluate_production, evaluate_market = synthesis_agent._make_tools({})
+        evaluate_situation, evaluate_production, evaluate_market = synthesis_agent._make_tools({}, "12501")
         for fn in (evaluate_situation, evaluate_production, evaluate_market):
             self.assertTrue(
                 asyncio.iscoroutinefunction(fn),
@@ -57,7 +57,7 @@ class ToolFunctionsAreAsyncTest(unittest.TestCase):
 class EvaluateSituationDoesNotBlockEventLoopTest(unittest.IsolatedAsyncioTestCase):
     async def test_heartbeat_keeps_ticking_during_sub_agent_call(self):
         sub_results: dict = {}
-        evaluate_situation, _evaluate_production, _evaluate_market = synthesis_agent._make_tools(sub_results)
+        evaluate_situation, _evaluate_production, _evaluate_market = synthesis_agent._make_tools(sub_results, "12501")
 
         heartbeat_ticks = 0
         stop = asyncio.Event()
@@ -70,7 +70,7 @@ class EvaluateSituationDoesNotBlockEventLoopTest(unittest.IsolatedAsyncioTestCas
 
         with mock.patch.object(synthesis_agent, "run_situation_agent", _slow_stub_situation_agent):
             heartbeat_task = asyncio.create_task(heartbeat())
-            result = await evaluate_situation("12501")
+            result = await evaluate_situation()
             stop.set()
             await heartbeat_task
 

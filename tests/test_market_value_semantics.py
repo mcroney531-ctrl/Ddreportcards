@@ -139,7 +139,7 @@ class MarketWordingContractTest(unittest.TestCase):
         self.assertIn("market-consensus", doc)
 
     def test_synthesis_tool_description_matches(self):
-        evaluate_market = next(t for t in synthesis_agent._make_tools({}) if t.__name__ == "evaluate_market")
+        evaluate_market = next(t for t in synthesis_agent._make_tools({}, "p1") if t.__name__ == "evaluate_market")
         doc = _collapsed(evaluate_market.__doc__)
         self.assertNotIn("trade value — a hybrid", doc)
         self.assertIn("fantasycalc market-consensus standing", doc)

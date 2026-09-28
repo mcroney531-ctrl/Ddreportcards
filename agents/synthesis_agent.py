@@ -30,9 +30,50 @@ from agents.situation_agent import run_situation_agent
 from agents.production_agent import run_production_agent
 from agents.market_agent import run_market_agent
 
-# Deterministic Market facts the player card exposes; copied from the Market
-# result in code (see run_synthesis_agent).
+# Card fields each sub-agent owns; copied from that sub-agent's result in code
+# (see run_synthesis_agent), never from the Synthesis model's copy. The
+# Synthesis model authors only key_strengths, key_concerns and narrative.
+SITUATION_CARD_FIELDS = ("player", "position", "team", "opportunity_score", "opportunity_grade")
+PRODUCTION_CARD_FIELDS = ("production_score", "production_grade", "risk_modifier")
 MARKET_CARD_FIELDS = ("dynasty_value", "hybrid_market_value", "trend_30day", "trade_value_score", "trade_value_grade")
+
+
+def _is_number(value) -> bool:
+    return isinstance(value, (int, float)) and not isinstance(value, bool)
+
+
+def _unusable(result, label: str) -> str | None:
+    """Why a sub-agent result can't be used, or None if it can."""
+    if not isinstance(result, dict):
+        return f"{label} agent did not run"
+    if "error" in result:
+        return f"{label}: {result['error']}"
+    if "raw_output" in result:
+        return f"unstructured {label} output"
+    return None
+
+
+def _market_inputs(sub_results: dict) -> tuple[tuple | None, str | None]:
+    """(opportunity_score, production_score, current_health_score, aging_risk)
+    taken from the Situation/Production results, or (None, reason). Nothing is
+    substituted for a missing or non-numeric value."""
+    situation, production = sub_results.get("situation"), sub_results.get("production")
+    problem = _unusable(situation, "situation") or _unusable(production, "production")
+    if problem:
+        return None, problem
+    risk = production.get("risk_modifier")
+    if not _is_number(situation.get("opportunity_score")):
+        return None, "situation result has no numeric opportunity_score"
+    if not _is_number(production.get("production_score")):
+        return None, "production result has no numeric production_score"
+    if not isinstance(risk, dict):
+        return None, "production result has no risk_modifier"
+    if not _is_number(risk.get("current_health_score")):
+        return None, "production risk_modifier has no numeric current_health_score"
+    if not risk.get("aging_risk"):
+        return None, "production risk_modifier has no aging_risk"
+    return (situation["opportunity_score"], production["production_score"],
+            risk["current_health_score"], risk["aging_risk"]), None
 
 # ── Thread helper (avoids nested-asyncio issue under Streamlit) ───────────────
 
@@ -52,49 +93,51 @@ def _run_in_thread(coro):
 # echo into its final narrative. This backs the UI's "what's behind this
 # score" drill-down without relying on the LLM to faithfully copy large JSON
 # blobs verbatim.
+#
+# The tools are also closed over the one player_id this run evaluates, and take
+# no arguments: the model can't pick another player, and Market's inputs come
+# from the Situation/Production results, not from values the model passes.
 
-def _make_tools(sub_results: dict):
-    async def evaluate_situation(player_id: str) -> dict:
+def _make_tools(sub_results: dict, player_id: str):
+    async def evaluate_situation() -> dict:
         """
-        Call the Situation Agent to evaluate opportunity for a rostered player.
+        Call the Situation Agent to evaluate opportunity for the player under review.
         Returns opportunity_score (0-100), opportunity_grade (letter), team,
         depth_chart_order, competition breakdown, key_factors, concerns, summary.
-        player_id: Sleeper player_id
+        Takes no arguments.
         """
         result = await asyncio.to_thread(_run_in_thread, run_situation_agent(player_id))
         sub_results["situation"] = result
         return result
 
-    async def evaluate_production(player_id: str) -> dict:
+    async def evaluate_production() -> dict:
         """
         Call the Production Agent to evaluate on-field production and compute the
-        Risk Modifier for a rostered player. Returns production_score (0-100),
+        Risk Modifier for the player under review. Returns production_score (0-100),
         production_grade, key_stats, risk_modifier (current_health_score 1-5 --
         a current health/availability signal only, not a historical durability
         assessment or a forecast of future injury probability -- plus aging_risk),
-        key_factors, concerns, summary.
-        player_id: Sleeper player_id
+        key_factors, concerns, summary. Takes no arguments.
         """
         result = await asyncio.to_thread(_run_in_thread, run_production_agent(player_id))
         sub_results["production"] = result
         return result
 
-    async def evaluate_market(
-        player_id: str, opportunity_score: int, production_score: int, current_health_score: int, aging_risk: str
-    ) -> dict:
+    async def evaluate_market() -> dict:
         """
-        Call the Market Agent. Returns trade_value_score/trade_value_grade -- the
-        player's FantasyCalc market-consensus standing (position percentile) -- plus
-        hybrid_market_value: FantasyCalc's dynasty value nudged by our own proprietary
-        composite (built from the opportunity/production/risk scores you pass in).
-        player_id: Sleeper player_id
-        opportunity_score, production_score: from evaluate_situation/evaluate_production
-        current_health_score, aging_risk: from evaluate_production's risk_modifier
+        Call the Market Agent for the player under review. Returns
+        trade_value_score/trade_value_grade -- the player's FantasyCalc
+        market-consensus standing (position percentile) -- plus hybrid_market_value:
+        FantasyCalc's dynasty value nudged by our own proprietary composite. Takes no
+        arguments: its opportunity_score, production_score, current_health_score and
+        aging_risk come from the evaluate_situation / evaluate_production results, so
+        call those first.
         """
-        result = await asyncio.to_thread(
-            _run_in_thread,
-            run_market_agent(player_id, opportunity_score, production_score, current_health_score, aging_risk),
-        )
+        inputs, problem = _market_inputs(sub_results)
+        if problem:
+            result = {"error": f"evaluate_market needs usable situation and production results first ({problem})"}
+        else:
+            result = await asyncio.to_thread(_run_in_thread, run_market_agent(player_id, *inputs))
         sub_results["market"] = result
         return result
 
@@ -108,9 +151,11 @@ SYSTEM_PROMPT = """You are the Synthesis Agent for a dynasty fantasy football ro
 You orchestrate the full per-player evaluation pipeline for one rostered player:
 1. Call evaluate_situation → get Opportunity grade
 2. Call evaluate_production → get Production grade + Risk Modifier
-3. Call evaluate_market, passing opportunity_score, production_score, current_health_score,
-   and aging_risk from steps 1-2 → get Trade Value
-4. Synthesize everything into one player card
+3. Call evaluate_market → get Trade Value (it takes the opportunity/production/risk inputs
+   from steps 1-2 itself; none of the tools take arguments)
+4. Synthesize everything into one player card. The sub-agents' scores, grades,
+   risk_modifier, market fields and identity are copied onto the card in code; your job is
+   key_strengths, key_concerns and the narrative, consistent with those results
 
 This is a 12-team, 4-round, superflex (2 QB starts), PPR dynasty league. Weigh QB value
 accordingly in your narrative — a rostered QB carries a real superflex premium.
@@ -146,7 +191,7 @@ Output format — return a JSON object with these exact keys:
 
 # ── Agent + runner ────────────────────────────────────────────────────────────
 
-def build_synthesis_agent(sub_results: dict) -> LlmAgent:
+def build_synthesis_agent(sub_results: dict, player_id: str) -> LlmAgent:
     return LlmAgent(
         model=LiteLlm(model="anthropic/claude-sonnet-4-6", api_key=os.getenv("ANTHROPIC_API_KEY")),
         generate_content_config=genai_types.GenerateContentConfig(
@@ -157,7 +202,7 @@ def build_synthesis_agent(sub_results: dict) -> LlmAgent:
         on_model_error_callback=clear_invocation_reservation,
         name="synthesis_agent",
         instruction=SYSTEM_PROMPT,
-        tools=_make_tools(sub_results),
+        tools=_make_tools(sub_results, player_id),
     )
 
 
@@ -170,7 +215,7 @@ async def run_synthesis_agent(player_id: str) -> dict:
     each score — not part of the LLM-authored schema, attached in code.
     """
     sub_results: dict = {}
-    agent = build_synthesis_agent(sub_results)
+    agent = build_synthesis_agent(sub_results, player_id)
     session_service = InMemorySessionService()
     runner = Runner(agent=agent, app_name="dynasty_report_cards", session_service=session_service)
 
@@ -196,18 +241,24 @@ async def run_synthesis_agent(player_id: str) -> dict:
     json_match = re.search(r'\{.*\}', result_text, re.DOTALL)
     if json_match:
         card = json.loads(json_match.group())
-        # Market facts on the card are copied from the Market result in code,
-        # never from the synthesis model's copy (the card is what the app shows
-        # and the roster grades). No usable Market result -> the card fails,
-        # using the same {"error", "player", "position"} shape the app and API
-        # already treat as a failed card.
-        market = sub_results.get("market")
-        if not market or "error" in market or "raw_output" in market:
-            reason = (market or {}).get("error") or ("unstructured market output" if market else "market agent did not run")
-            return {"error": f"market evaluation unavailable: {reason}", "player": card.get("player"),
-                    "position": card.get("position"), "_detail": sub_results}
-        for key in MARKET_CARD_FIELDS:
-            card[key] = market.get(key)
+        # Sub-agent-owned fields are copied from the sub-agent results in code,
+        # never from the synthesis model's copy (the card is what the app shows,
+        # the roster grades and the Trade Agent flags). Any unusable sub-agent
+        # result fails the card, using the {"error", "player", "position"} shape
+        # the app and API already treat as a failed card. Identity comes from
+        # Situation only, never from the synthesis model's guess.
+        situation = sub_results.get("situation")
+        _, problem = _market_inputs(sub_results)
+        problem = problem or _unusable(sub_results.get("market"), "market")
+        if problem:
+            identity = situation if not _unusable(situation, "situation") else {}
+            return {"error": f"report card unavailable: {problem}", "player": identity.get("player"),
+                    "position": identity.get("position"), "_detail": sub_results}
+        for fields, source in ((SITUATION_CARD_FIELDS, situation),
+                               (PRODUCTION_CARD_FIELDS, sub_results["production"]),
+                               (MARKET_CARD_FIELDS, sub_results["market"])):
+            for key in fields:
+                card[key] = source.get(key)
         card["_detail"] = sub_results
         return card
     return {"raw_output": result_text}

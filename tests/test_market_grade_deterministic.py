@@ -182,11 +182,22 @@ class SynthesisCardUsesMarketResultTest(unittest.TestCase):
                 self.agent = agent
 
             async def run_async(self, **_):
-                evaluate_market = next(t for t in self.agent.tools if t.__name__ == "evaluate_market")
-                await evaluate_market("p1", 75, 80, 5, "low")
+                tools = {t.__name__: t for t in self.agent.tools}
+                await tools["evaluate_situation"]()
+                await tools["evaluate_production"]()
+                await tools["evaluate_market"]()  # Stage 3C.7: no arguments
                 yield _final_event(json.dumps({"player": "T", "trade_value_score": 12, "trade_value_grade": "F"}))
 
+        async def fake_situation(*_a):
+            return {"player": "T", "position": "RB", "team": "KC", "opportunity_score": 75, "opportunity_grade": "B+"}
+
+        async def fake_production(*_a):
+            return {"production_score": 80, "production_grade": "B",
+                    "risk_modifier": {"current_health_score": 5, "aging_risk": "low"}}
+
         with mock.patch.object(synthesis_agent, "run_market_agent", fake_market), \
+             mock.patch.object(synthesis_agent, "run_situation_agent", fake_situation), \
+             mock.patch.object(synthesis_agent, "run_production_agent", fake_production), \
              mock.patch.object(synthesis_agent, "Runner", FakeRunner):
             card = asyncio.run(synthesis_agent.run_synthesis_agent("p1"))
         self.assertEqual((card["trade_value_score"], card["trade_value_grade"]), (59, "B-"))
