@@ -10,8 +10,9 @@ synthesis_agent + roster_agent's shared quality_score:
   - sell_high: our internal risk flag is up (low current health or high aging
     risk) while the market-consensus trade value is still elevated. We can't
     observe why the market is where it is, only that the two disagree.
-  - sell_before_drop: opportunity_score trails trade_value_score by a wide
-    margin — the market hasn't priced in a declining role yet.
+  - sell_before_drop: our opportunity_score is well below the market-consensus
+    trade_value_score. We can't observe why the market is there, only that
+    the market standing is well above our view of the role.
   - positional_surplus: enough real contributors at one position that the
     weakest of the group is a reasonable candidate to deal from depth.
 
@@ -90,7 +91,7 @@ def detect_sell_signals(player_cards_json: str) -> dict:
         if gap >= SELL_BEFORE_DROP_GAP:
             _flag(name, "sell_before_drop", (
                 f"opportunity_score={opportunity_score} trails trade_value_score={trade_value_score} "
-                f"by {gap} pts — the market hasn't priced in the declining role yet."
+                f"by {gap} pts — market standing is {gap} pts above our internal opportunity score."
             ))
 
     by_position: dict[str, list[dict]] = {}

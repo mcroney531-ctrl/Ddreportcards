@@ -192,6 +192,13 @@ async def run_synthesis_agent(player_id: str) -> dict:
     json_match = re.search(r'\{.*\}', result_text, re.DOTALL)
     if json_match:
         card = json.loads(json_match.group())
+        # The Market result's score/grade are computed in code; don't trust the
+        # synthesis model's copy of them (the card is what the app shows and
+        # the roster grades).
+        market = sub_results.get("market") or {}
+        for key in ("trade_value_score", "trade_value_grade"):
+            if key in market:
+                card[key] = market[key]
         card["_detail"] = sub_results
         return card
     return {"raw_output": result_text}

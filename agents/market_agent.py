@@ -21,7 +21,7 @@ Inputs:  Sleeper player_id + the Opportunity/Production/Risk outputs already
 Outputs: market-consensus Trade Value Grade, Hybrid Market Value, trend note.
 """
 
-import os, sys, json, re
+import os, sys, json, re, math, functools
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 
 from dotenv import load_dotenv
@@ -53,6 +53,34 @@ AGING_RISK_PENALTY = {"low": 0, "moderate": -5, "high": -12, "unknown": 0}
 # How far our proprietary view is allowed to move the market-anchored value.
 # +/-25% is a deliberate ceiling — FantasyCalc stays the anchor, we nudge it.
 MAX_BLEND_ADJUSTMENT = 0.25
+
+# Trade Value Grade: relative FantasyCalc standing within the position, not the
+# Production/Opportunity 0-100 scale. The six market tiers below (90-100, 75-89,
+# 55-74, 35-54, 15-34, 0-14) each named two letters; each is split at its
+# midpoint. (lower bound, grade), checked top-down.
+MARKET_GRADE_TABLE = [
+    (96, "A+"), (90, "A"),
+    (83, "A-"), (75, "B+"),
+    (65, "B"), (55, "B-"),
+    (45, "C+"), (35, "C"),
+    (25, "D+"), (15, "D"),
+    (8, "D-"), (0, "F"),
+]
+
+
+def market_grade_from_percentile(percentile: float) -> str:
+    """Letter for a raw market_percentile (0-100). Graded BEFORE rounding, so
+    89.6 is an A-, not a 90th-percentile A."""
+    for lower, grade in MARKET_GRADE_TABLE:
+        if percentile >= lower:
+            return grade
+    return "F"
+
+
+def market_score_from_percentile(percentile: float) -> int:
+    """trade_value_score: market_percentile rounded half-up for display and
+    roster math (Python's round() would send 59.5 and 60.5 both to 60)."""
+    return int(math.floor(percentile + 0.5))
 
 
 # ── ADK tool functions ────────────────────────────────────────────────────────
@@ -169,8 +197,9 @@ def blend_with_market(proprietary_composite: float, player_id: str) -> dict:
 # ── Calibration anchors ────────────────────────────────────────────────────────
 
 MARKET_CALIBRATION = """
-Trade Value Grade calibration anchors, based on market_percentile (position rank,
-where 100 = the top player at the position league-wide):
+Trade Value Grade — relative FantasyCalc standing within the position, based on
+market_percentile (position rank, where 100 = the top player at the position
+league-wide). This is the Market grade scale, not the Production/Opportunity 0-100 scale:
 - 90-100: A+/A — top-tier dynasty asset at the position, elite trade chip
 - 75-89:  A-/B+ — clear top-12 startable asset
 - 55-74:  B/B- — solid starter-level trade value
@@ -178,9 +207,9 @@ where 100 = the top player at the position league-wide):
 - 15-34:  D+/D — replaceable, minimal trade appeal
 - 0-14:   D-/F — negligible trade value
 
-Letter grade conversion (same scale used by the other agents):
-97-100→A+, 93-96→A, 90-92→A-, 87-89→B+, 83-86→B, 80-82→B-,
-77-79→C+, 73-76→C, 70-72→C-, 67-69→D+, 63-66→D, 60-62→D-, <60→F
+Exact letters (computed in code from the raw percentile, before rounding):
+96-100→A+, 90-95→A, 83-89→A-, 75-82→B+, 65-74→B, 55-64→B-,
+45-54→C+, 35-44→C, 25-34→D+, 15-24→D, 8-14→D-, 0-7→F
 """
 
 SYSTEM_PROMPT = f"""You are the Market Agent for a dynasty fantasy football roster report card tool.
@@ -216,8 +245,10 @@ Steps:
 2. Call compute_proprietary_composite using the opportunity_score, production_score,
    current_health_score, and aging_risk provided to you in the user message
 3. Call blend_with_market with the proprietary composite to get the final hybrid market value
-4. Set trade_value_score to market_percentile (rounded) and convert it into a letter grade
-   using the calibration above — do not adjust it for our composite or the divergence
+4. trade_value_score and trade_value_grade are deterministic: code sets them from
+   blend_with_market's market_percentile using the table above. Report them as that table
+   gives them; do not choose, adjust or re-grade them (not for our composite, not for the
+   divergence)
 5. Write a short trend note: is the market moving on this player (trend_30day), and does
    our internal view agree or diverge from consensus (the divergence/note from blend_with_market)?
 
@@ -239,7 +270,32 @@ Output format — always return a JSON object with these exact keys:
 
 # ── Agent + runner ────────────────────────────────────────────────────────────
 
-def build_market_agent() -> LlmAgent:
+def _capturing_blend(capture: dict):
+    """blend_with_market, recording its deterministic result so run_market_agent
+    can grade from the tool output rather than the model's copy of it."""
+    @functools.wraps(blend_with_market)
+    def wrapped(proprietary_composite: float, player_id: str) -> dict:
+        result = blend_with_market(proprietary_composite, player_id)
+        capture["blend"] = result
+        return result
+    return wrapped
+
+
+def _apply_deterministic_grade(result: dict, capture: dict) -> dict:
+    """Overwrite the model-authored market_percentile / trade_value_score /
+    trade_value_grade with the deterministic values. Source of the percentile:
+    the captured blend_with_market result; only if the tool never ran, the
+    model's own market_percentile."""
+    blend = capture.get("blend")
+    percentile = blend["market_percentile"] if blend else result.get("market_percentile")
+    if isinstance(percentile, (int, float)) and not isinstance(percentile, bool):
+        result["market_percentile"] = percentile
+        result["trade_value_score"] = market_score_from_percentile(percentile)
+        result["trade_value_grade"] = market_grade_from_percentile(percentile)
+    return result
+
+
+def build_market_agent(capture: dict | None = None) -> LlmAgent:
     return LlmAgent(
         model=LiteLlm(model="anthropic/claude-sonnet-4-6", api_key=os.getenv("ANTHROPIC_API_KEY")),
         generate_content_config=genai_types.GenerateContentConfig(
@@ -250,15 +306,21 @@ def build_market_agent() -> LlmAgent:
         on_model_error_callback=clear_invocation_reservation,
         name="market_agent",
         instruction=SYSTEM_PROMPT,
-        tools=[get_market_consensus, compute_proprietary_composite, blend_with_market],
+        tools=[
+            get_market_consensus,
+            compute_proprietary_composite,
+            _capturing_blend(capture) if capture is not None else blend_with_market,
+        ],
     )
 
 
 async def run_market_agent(
     player_id: str, opportunity_score: int, production_score: int, current_health_score: int, aging_risk: str
 ) -> dict:
-    """Run the Market Agent for a given player. Returns parsed JSON output."""
-    agent = build_market_agent()
+    """Run the Market Agent for a given player. Returns parsed JSON output, with
+    market_percentile/trade_value_score/trade_value_grade set deterministically."""
+    capture: dict = {}
+    agent = build_market_agent(capture)
     session_service = InMemorySessionService()
     runner = Runner(agent=agent, app_name="dynasty_report_cards", session_service=session_service)
 
@@ -287,7 +349,7 @@ async def run_market_agent(
 
     json_match = re.search(r'\{.*\}', result_text, re.DOTALL)
     if json_match:
-        return json.loads(json_match.group())
+        return _apply_deterministic_grade(json.loads(json_match.group()), capture)
     return {"raw_output": result_text}
 
 
