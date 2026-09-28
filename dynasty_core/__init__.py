@@ -8,4 +8,5 @@ Modules:
   sleeper      — Sleeper fantasy API (league, rosters, players, trades)
   espn         — ESPN Core API (active NFL: stats, injuries, team map)
   fantasycalc  — FantasyCalc dynasty values + grade logic
+  settings     — package-owned FantasyCalc query-profile defaults
 """

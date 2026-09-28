@@ -417,7 +417,7 @@ correct.
 
 | # | Item | Evidence | Affected | Recommended action | Why a blocker |
 |---|---|---|---|---|---|
-| B1 | FantasyCalc defaults come from an ambient host module | §2.2: a different ambient `config.dynasty_config` silently changed `ppr/num_qbs/num_teams`; a malformed one crashes at import | `dynasty_core/fantasycalc.py` (both); `config/dynasty_config.py` (both) | Remove the `config.dynasty_config` import. Make league parameters an explicit package contract: a package-owned league-settings module whose values are the documented defaults, imported **inside** the package, with callers still able to pass explicit arguments. Scout's `config/dynasty_config.py`, whose only reader is this import, becomes deletable. DD's becomes a re-export of the package's settings (or stays app-owned for `league_id`/display name — see Q5). Add the import-isolation test. | Once installed, the package's behavior must be a function of the package version. Today it is a function of whatever the host has on `sys.path`. |
+| B1 | **RESOLVED in 2C-2.** FantasyCalc defaults come from an ambient host module | §2.2: a different ambient `config.dynasty_config` silently changed `ppr/num_qbs/num_teams`; a malformed one crashes at import | `dynasty_core/fantasycalc.py` (both); `config/dynasty_config.py` (both) | Remove the `config.dynasty_config` import. Make league parameters an explicit package contract: a package-owned league-settings module whose values are the documented defaults, imported **inside** the package, with callers still able to pass explicit arguments. Scout's `config/dynasty_config.py`, whose only reader is this import, becomes deletable. DD's becomes a re-export of the package's settings (or stays app-owned for `league_id`/display name — see Q5). Add the import-isolation test. | Once installed, the package's behavior must be a function of the package version. Today it is a function of whatever the host has on `sys.path`. |
 
 ### FIX BEFORE PACKAGING
 
@@ -443,7 +443,7 @@ correct.
 
 | # | Item | Evidence | Affected | Recommended action | Why here |
 |---|---|---|---|---|---|
-| R1 | Scout `config/dynasty_config.py` | §2.2: sole importer is the fantasycalc import that B1 removes | scoutcap | Delete in the same batch as B1. | Otherwise it's a fourth copy of league settings with no reader. |
+| R1 | **RESOLVED in 2C-2.** Scout `config/dynasty_config.py` | §2.2: sole importer is the fantasycalc import that B1 removes | scoutcap | Delete in the same batch as B1. | Otherwise it's a fourth copy of league settings with no reader. |
 | R2 | Per-app copies of `dynasty_core/` and of the four `test_dynasty_core_*` files | §1, §9 | both | Delete when the pin lands (the extraction batch itself). | Leaving them turns the pin into a fifth source of truth. |
 
 Deliberately **not** in this category: `tools/espn.py::get_nfl_team` is dead
@@ -654,3 +654,83 @@ committed):
 - Streamlit `AppTest` of `app.py` raised no exceptions.
 
 Totals: Ddreportcards 201 → **206**, scoutcap 120 → **125**, all green.
+
+---
+
+## 2C-2 completion — package-owned FantasyCalc profile (B1, R1)
+
+**B1 — resolved.** `dynasty_core.fantasycalc` no longer imports
+`config.dynasty_config`. Its defaults come from a new, deliberately narrow
+package module through a relative import:
+
+```python
+# dynasty_core/settings.py — no imports, no identity, no env loading
+FANTASYCALC_IS_DYNASTY = True
+FANTASYCALC_NUM_QBS = 2
+FANTASYCALC_NUM_TEAMS = 12
+FANTASYCALC_PPR = 0.5
+```
+
+`get_dynasty_values()` binds its defaults from these constants, and
+`_default_params_key()` derives the default cache key from them.
+`is_dynasty` was already hardcoded to `True` rather than config-driven; it
+now comes from the same profile.
+
+What stayed the same:
+- The public signature and every explicit-argument call.
+- A no-argument call sends exactly the same request (`isDynasty=true`,
+  `numQbs=2`, `numTeams=12`, `ppr=0.5`, timeout 20).
+- Cache key structure, 6h TTL, the 2C-1.5 freshness fix, failed-refresh
+  behavior, index invalidation, transforms and grade tiers.
+- The 2C-1 and 2C-1.5 tests all pass unmodified.
+
+**Permanent isolation regression**
+(`tests/test_dynasty_core_settings_isolation.py`, byte-identical in both
+repos). Each scenario copies the package into a temp directory next to a
+different `config` package and imports it in a fresh `python -E`
+interpreter:
+
+| Scenario | Before 2C-2 | After 2C-2 |
+|---|---|---|
+| no `config` package | fallback `2/12/0.5` | package profile `True/2/12/0.5` |
+| unrelated `config` package | fallback `2/12/0.5` | package profile `True/2/12/0.5` |
+| hostile `config.dynasty_config` (`False/1/10/1.0`) | **silently `1/10/1.0`** | package profile `True/2/12/0.5`; host config not even loaded |
+| malformed `config.dynasty_config` (keys missing) | **`KeyError: 'ppr'` at import** | imports; package profile `True/2/12/0.5` |
+
+The same file also checks:
+- An AST-level check that no package module imports a top-level `config`.
+- `settings.py` has no imports and exposes exactly the four profile names.
+- The `get_dynasty_values` signature exposes the profile.
+- A no-argument call sends the pre-2C-2 request exactly.
+
+Fail-first: against the pre-2C-2 `fantasycalc.py`, the isolation test
+failed on the hostile and malformed scenarios.
+
+**R1 — resolved.** A repo-wide grep after the change found no importer of
+`scoutcap/config/dynasty_config.py`, so the file was deleted.
+`scoutcap/config/` and `config/league.py` remain.
+
+**Ownership boundary (final for this stage):**
+
+| Location | Owns |
+|---|---|
+| `dynasty_core.settings` | FantasyCalc query-profile defaults **only** |
+| `Ddreportcards/config/dynasty_config.py` | app-level league metadata / deployment identity (`league_id`, display name, `/league` payload). Values unchanged; docstring corrected — it no longer claims to be the source for both engines or for FantasyCalc queries |
+| `scoutcap/config/league.py` | Scout draft/product policy |
+| `scoutcap/config/dynasty_config.py` | removed as orphan |
+
+Deliberately **not** cross-linked. `dynasty_core.settings` doesn't import the
+DD app config, and the DD app config doesn't import `dynasty_core.settings`.
+They answer different ownership questions. Their overlapping values
+(`num_teams`, `num_qbs`, `ppr`) are part of **D4, which stays open**. GM
+Command's JSON mirror is out of scope.
+
+**Scout verification without its old config:**
+- `tools.fantasycalc`, both agents and `mcp_server` import cleanly.
+- `config.dynasty_config` is never loaded.
+- `get_player_value` sends the unchanged default request, and MCP
+  `dynasty_value` resolves.
+- Streamlit `AppTest` of `app.py` raises no exceptions.
+
+Totals: Ddreportcards 206 → **214**, scoutcap 125 → **133**, all green. O2
+untouched.

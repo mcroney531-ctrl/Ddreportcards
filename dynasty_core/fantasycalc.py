@@ -4,7 +4,8 @@ Open, unauthenticated. https://api.fantasycalc.com/values/current
 
 Merges scoutcap/tools/fantasycalc.py (grade logic + condensed index accessor)
 and ddreportcards/data/fantasycalc_client.py (raw list interface + full caching).
-League params driven by config/dynasty_config.py; falls back to half-PPR defaults.
+Default query profile (dynasty, QB count, team count, PPR) comes from the
+package's own dynasty_core.settings; callers may pass explicit values.
 
 Two accessor styles, both supported:
   Raw entry (Report Cards style): get_value_for_sleeper_id() -> full FC dict
@@ -18,15 +19,12 @@ from collections import defaultdict
 
 import httpx
 
-try:
-    from config.dynasty_config import LEAGUE as _LEAGUE
-    _DEFAULT_PPR: float = _LEAGUE["ppr"]
-    _DEFAULT_NUM_QBS: int = _LEAGUE["num_qbs"]
-    _DEFAULT_NUM_TEAMS: int = _LEAGUE["num_teams"]
-except ImportError:
-    _DEFAULT_PPR = 0.5
-    _DEFAULT_NUM_QBS = 2
-    _DEFAULT_NUM_TEAMS = 12
+from .settings import (
+    FANTASYCALC_IS_DYNASTY,
+    FANTASYCALC_NUM_QBS,
+    FANTASYCALC_NUM_TEAMS,
+    FANTASYCALC_PPR,
+)
 
 BASE_URL = "https://api.fantasycalc.com/values/current"
 
@@ -51,14 +49,19 @@ _index_cache: dict[str, dict] | None = None  # condensed index; invalidated with
 
 
 def _default_params_key() -> tuple:
-    return (True, _DEFAULT_NUM_QBS, _DEFAULT_NUM_TEAMS, _DEFAULT_PPR)
+    return (
+        bool(FANTASYCALC_IS_DYNASTY),
+        int(FANTASYCALC_NUM_QBS),
+        int(FANTASYCALC_NUM_TEAMS),
+        float(FANTASYCALC_PPR),
+    )
 
 
 def get_dynasty_values(
-    is_dynasty: bool = True,
-    num_qbs: int = _DEFAULT_NUM_QBS,
-    num_teams: int = _DEFAULT_NUM_TEAMS,
-    ppr: float = _DEFAULT_PPR,
+    is_dynasty: bool = FANTASYCALC_IS_DYNASTY,
+    num_qbs: int = FANTASYCALC_NUM_QBS,
+    num_teams: int = FANTASYCALC_NUM_TEAMS,
+    ppr: float = FANTASYCALC_PPR,
 ) -> list[dict]:
     """Full league-wide value list from FantasyCalc. Cached 6 h per parameter set."""
     global _index_cache

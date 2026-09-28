@@ -1,9 +1,13 @@
-"""Canonical league settings for Dynasty Daddies — single source of truth.
+"""Ddreportcards' app-level league metadata for Dynasty Daddies.
 
-Stage 0 of the Dynasty Umbrella project. Both Python engines import LEAGUE
-from here; GM Command mirrors these values as dynasty_config.json.
+Deployment identity and league facts this app uses directly (e.g. league_id
+and my_display_name in api.py, and the /league endpoint). GM Command keeps
+its own mirror of these values in dynasty_config.json.
 
-All FantasyCalc queries (ppr, numQbs, numTeams) must come from this module.
+FantasyCalc provider-query defaults are NOT sourced from here: they are
+owned by the shared package, in dynasty_core.settings. Some values overlap
+today (num_teams, num_qbs, ppr); that duplication is a known, deliberately
+deferred item.
 Verified against Sleeper API 2026-07-04.
 """
 
