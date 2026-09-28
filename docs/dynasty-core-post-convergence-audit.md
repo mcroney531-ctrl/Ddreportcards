@@ -426,7 +426,7 @@ correct.
 | F1 | **RESOLVED in 2C-3.** Ddreportcards-only workflows inside the shared namespace | §5: `get_all_trades_all_seasons`, `get_roster_by_display_name`, `resolve_roster_players` are called only by DD and encode DD identity/annotation policy | `dynasty_core/sleeper.py`; DD `data/sleeper_client.py`, `api.py`, `app.py`, `data/trade_history.py` | Move them into a Ddreportcards-owned module. Re-point DD's facade and `api.py`'s direct import; callers otherwise unchanged. Keep `get_league_season_chain`. | Whatever ships in v1 becomes the versioned contract. Removing them later is a breaking package release; removing them now is a local DD refactor. |
 | F2 | **RESOLVED in 2C-1** (package-level FantasyCalc/ESPN/Sleeper coverage). Package-level tests missing for FantasyCalc and ESPN | §9.1 | new package test suite | Write the FantasyCalc and ESPN provider-contract and cache tests (and the Sleeper primitive URL tests) **before** extraction, run them against the current copies, then move them with the package. | Extraction must not be the first time the package's behavior is specified. The FantasyCalc cache has a documented history of silent wrong answers. |
 | F3 | Ddreportcards pin contract can't express a Git dependency | §7: `test_requirements_are_pinned.py` and `check_dependency_versions.py` accept only `==` pins and exactly 8 names | DD `tests/test_requirements_are_pinned.py`, `scripts/check_dependency_versions.py` | Extend both, deliberately, to accept one additional form: `dynasty-core @ git+https://…@<40-hex SHA>`. Reject branch names and tags. | Otherwise the first packaging commit either fails CI or quietly weakens the Phase 4B guarantee. |
-| F4 | Scout requirements unpinned | §7 | scoutcap `requirements.txt` | Pin the direct dependencies to known-good versions (the same method as DD's Phase 4B). | The release gate (§9.3 step 3) is not reproducible without it. |
+| F4 | **RESOLVED in 2C-5.** Scout requirements unpinned | §7 | scoutcap `requirements.txt` | Pin the direct dependencies to known-good versions (the same method as DD's Phase 4B). | The release gate (§9.3 step 3) is not reproducible without it. |
 | F5 | **RESOLVED in 2C-4.** Scout `_load_pick_arsenal` Sleeper bypass | §4.1 | scoutcap `app.py` 854–866 | Replace the two direct calls with `get_users_in_league` / a newly facade-exported `get_traded_picks`. Keep `season` as an explicit argument (the caller already passes `"2026"`). Do **not** change the year policy in this batch. | Small. It leaves exactly one Sleeper HTTP implementation per app before the pin is introduced, so the version pin governs *all* Sleeper behavior in both apps. It also stops a non-2xx body being parsed as data. |
 
 ### SAFE TO DEFER
@@ -955,5 +955,81 @@ Totals: Ddreportcards 233 → **238**, scoutcap 144 → **149**, all green.
 F2, F5, O1, O2 and R1 are all resolved. The remaining pre-extraction items
 are release and deployment mechanics only:
 - **F4** — Scout requirements pinning;
+- **F3** — Ddreportcards immutable Git-pin contract;
+- **R2** — extraction and removal of the local copies.
+
+---
+
+## 2C-5 completion — Scout direct dependencies pinned (F4)
+
+**Baseline source.** The versions come from the environment that produced
+Scout's green suite and AppTest in 2C-4/2C-4.5: this sandbox's system
+interpreter, Python **3.11.15**, not 3.12. They were read with
+`importlib.metadata`, before any edit:
+
+| Direct dependency | Pinned | Ddreportcards pin | Overlap |
+|---|---|---|---|
+| `google-adk[extensions]` | `2.9.2` | `2.9.2` | match |
+| `anthropic` | `1.6.0` | `1.7.0` | **differs**; Scout keeps its proven `1.6.0` (not converged) |
+| `httpx` | `0.28.1` | `0.28.1` | match |
+| `python-dotenv` | `1.2.3` | `1.2.3` | match |
+| `streamlit` | `1.64.0` | `1.64.0` | match |
+| `pandas` | `2.3.3` | — | Scout-only, from Scout's environment |
+| `mcp[cli]` | `1.28.1` | — | Scout-only, from Scout's environment |
+
+Scout's `requirements.txt` now holds exactly these seven exact `==` pins,
+with extras preserved. No transitive dependencies were added, and no
+`litellm` / `fastapi` / `uvicorn` / `dynasty-core`. Note: Scout never
+imports `anthropic` directly. It stays on the list because it was already a
+declared direct dependency.
+
+**Pin contract.** New `tests/test_requirements_are_pinned.py` (5 tests):
+- every non-comment line is an exact pin;
+- exactly the seven normalized names;
+- no duplicates;
+- `google-adk[extensions]` and `mcp[cli]` extras preserved;
+- no ranges and no VCS/URL dependencies.
+
+Fail-first: against the pre-2C-5 unpinned file, everything except the
+duplicate check fails.
+
+**Diagnostic.** New `scripts/check_dependency_versions.py`, a port of
+Ddreportcards' checker (only the docstring differs). It is kept out of the
+offline suite. A narrow `.gitignore` exception was needed, because Scout's
+existing `check_*.py` scratch-script rule would otherwise have excluded it.
+Result in the baseline environment: 7/7 `[OK]`.
+
+**Clean-environment reproducibility (the release gate).** A fresh
+`python3.12 -m venv` (Python **3.12.3**, isolated from system
+site-packages), with only `pip install -r requirements.txt`:
+- `scripts/check_dependency_versions.py`: 7/7 `[OK]`;
+- full Scout suite: **154 OK**;
+- imports: `tools.sleeper`, `tools.fantasycalc`, `tools.espn`,
+  `agents.production_agent`, `agents.situation_agent`,
+  `agents.synthesis_agent`, `mcp_server`;
+- Streamlit `AppTest` (fake providers): normal startup, no exceptions; Mock
+  Draft "Load from Sleeper →" arsenal path, no exceptions, arsenal loaded.
+
+The seven pins reconstruct a working Scout from nothing on the declared
+Python version.
+
+**Direct pins, not a lockfile.** No `pip freeze` or transitive lock was
+generated; the clean install showed direct pins are sufficient. A residual
+risk worth recording: transitive `litellm` (which Scout's agents use via
+ADK's `LiteLlm`) is **not** pinned. It resolved to `1.103.0` in the clean
+environment, where Ddreportcards pins `1.102.0` directly, and it will float
+as `google-adk` allows. This is accepted under the direct-pins discipline
+and doesn't block extraction. If a future litellm release breaks Scout,
+promote it to a direct pin at that point.
+
+**Invariants.** `dynasty_core/` and every shared package test are unchanged.
+All five package files and all eight shared test files remain byte-identical
+across both repos. No Scout source behavior changed.
+
+Totals: scoutcap 149 → **154** (current environment and clean 3.12
+environment alike). Ddreportcards unchanged; this section is its only
+change.
+
+**Remaining pre-extraction mechanics:**
 - **F3** — Ddreportcards immutable Git-pin contract;
 - **R2** — extraction and removal of the local copies.
