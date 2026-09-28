@@ -1,0 +1,4486 @@
+{
+ "generated_utc": "2026-09-28 07:52",
+ "sources": [
+  {
+   "url": "https://github.com/nflverse/nflverse-data/releases/download/players/players.csv",
+   "bytes": 7293659,
+   "sha256": "60b130b19b8a196b860c90ce53e01844dca824d40db0bbbacf02312a0a6e9059",
+   "fetched_utc": "2026-09-28 07:50"
+  },
+  {
+   "url": "https://github.com/nflverse/nflverse-data/releases/download/stats_player/stats_player_reg_2010.csv",
+   "bytes": 797858,
+   "sha256": "a0ea4f139f49cb0542a2f74a4a72a2a72a8eee37f80c81f073d878abc97159b8",
+   "fetched_utc": "2026-09-28 07:50"
+  },
+  {
+   "url": "https://github.com/nflverse/nflverse-data/releases/download/stats_player/stats_player_reg_2011.csv",
+   "bytes": 792017,
+   "sha256": "f8a8e44ccf198570e3c1b05b7dd1430c7d05bdd977dd85a42398b3e97013dff4",
+   "fetched_utc": "2026-09-28 07:50"
+  },
+  {
+   "url": "https://github.com/nflverse/nflverse-data/releases/download/stats_player/stats_player_reg_2012.csv",
+   "bytes": 796636,
+   "sha256": "6cdfbf3b291cf1349b33fe8e90542d8ae54cca3726769866f94feaf866b329b5",
+   "fetched_utc": "2026-09-28 07:50"
+  },
+  {
+   "url": "https://github.com/nflverse/nflverse-data/releases/download/stats_player/stats_player_reg_2013.csv",
+   "bytes": 787236,
+   "sha256": "342fd27eef619a2aec4a74abf8f689e6b14fab526ae1300095b2654a3981882b",
+   "fetched_utc": "2026-09-28 07:50"
+  },
+  {
+   "url": "https://github.com/nflverse/nflverse-data/releases/download/stats_player/stats_player_reg_2014.csv",
+   "bytes": 811368,
+   "sha256": "9f7aee274dddd6b27ec66ae493507aebf5779ed81d4735a53b87bbf28030f7a1",
+   "fetched_utc": "2026-09-28 07:50"
+  },
+  {
+   "url": "https://github.com/nflverse/nflverse-data/releases/download/stats_player/stats_player_reg_2015.csv",
+   "bytes": 810770,
+   "sha256": "91cc6edbfe16bdc08c680c58ea6d8525c6b7668ef9b94ebdcc6ef9156fcd92d0",
+   "fetched_utc": "2026-09-28 07:50"
+  },
+  {
+   "url": "https://github.com/nflverse/nflverse-data/releases/download/stats_player/stats_player_reg_2016.csv",
+   "bytes": 815379,
+   "sha256": "17063fa01736c41b30ffbb15a284f64611fd8a517bfae5d4cdb0ebb19da78801",
+   "fetched_utc": "2026-09-28 07:50"
+  },
+  {
+   "url": "https://github.com/nflverse/nflverse-data/releases/download/stats_player/stats_player_reg_2017.csv",
+   "bytes": 819510,
+   "sha256": "ee3ed8e1b9f7998b7b7b43ec1139e1d69186818ad3e2ce100e4467f163f1ca3c",
+   "fetched_utc": "2026-09-28 07:50"
+  },
+  {
+   "url": "https://github.com/nflverse/nflverse-data/releases/download/stats_player/stats_player_reg_2018.csv",
+   "bytes": 828709,
+   "sha256": "8d66bc2dde26951038f6cb68edfcc9082c36423ec7df8185aa7b1b61906c866b",
+   "fetched_utc": "2026-09-28 07:50"
+  },
+  {
+   "url": "https://github.com/nflverse/nflverse-data/releases/download/stats_player/stats_player_reg_2019.csv",
+   "bytes": 830001,
+   "sha256": "324b77e6027839c15bad5d32a6d83d07f998e71e0a1e682a37543efeb5219064",
+   "fetched_utc": "2026-09-28 07:50"
+  },
+  {
+   "url": "https://github.com/nflverse/nflverse-data/releases/download/stats_player/stats_player_reg_2020.csv",
+   "bytes": 870722,
+   "sha256": "ac90bb97fd0cb8f8ae7783226c50f5db64bb375e99eaedbd32e97b8b16cf1a94",
+   "fetched_utc": "2026-09-28 07:50"
+  },
+  {
+   "url": "https://github.com/nflverse/nflverse-data/releases/download/stats_player/stats_player_reg_2021.csv",
+   "bytes": 911478,
+   "sha256": "2edb2190fa41c92eed8e997c0ba1ff6c737a0fe6d996129487fe34cb63264c6f",
+   "fetched_utc": "2026-09-28 07:50"
+  },
+  {
+   "url": "https://github.com/nflverse/nflverse-data/releases/download/stats_player/stats_player_reg_2022.csv",
+   "bytes": 877892,
+   "sha256": "af2d534b208af43d4b17bcba242dc949f2d40b367253f78c882c19eee9dfc937",
+   "fetched_utc": "2026-09-28 07:50"
+  },
+  {
+   "url": "https://github.com/nflverse/nflverse-data/releases/download/stats_player/stats_player_reg_2023.csv",
+   "bytes": 849941,
+   "sha256": "0cc79526a678907817713a7f603b75c4424a1cd4dfc98daa2b3018af80312b9c",
+   "fetched_utc": "2026-09-28 07:50"
+  },
+  {
+   "url": "https://github.com/nflverse/nflverse-data/releases/download/stats_player/stats_player_reg_2024.csv",
+   "bytes": 872095,
+   "sha256": "fbad4e9f1b892e3870a51a4eea808d692cde14ed6dbacd67cce3a0def8ddcbaa",
+   "fetched_utc": "2026-09-28 07:50"
+  },
+  {
+   "url": "https://github.com/nflverse/nflverse-data/releases/download/stats_player/stats_player_reg_2025.csv",
+   "bytes": 882104,
+   "sha256": "aaa8559478dd8d58569c93e278239e70e9411e79ee649c99d8d506030cd42b12",
+   "fetched_utc": "2026-09-28 07:50"
+  }
+ ],
+ "runtime_constants": {
+  "AGE_CURVES": {
+   "RB": {
+    "decline_age": 27,
+    "cliff_age": 29
+   },
+   "WR": {
+    "decline_age": 30,
+    "cliff_age": 32
+   },
+   "TE": {
+    "decline_age": 30,
+    "cliff_age": 32
+   },
+   "QB": {
+    "decline_age": 36,
+    "cliff_age": 39
+   }
+  },
+  "AGING_RISK_PENALTY": {
+   "low": 0,
+   "moderate": -5,
+   "high": -12,
+   "unknown": 0
+  },
+  "MAX_BLEND_ADJUSTMENT": 0.25,
+  "SELL_HIGH_MARKET_FLOOR": 55
+ },
+ "cohorts": {
+  "primary": {
+   "observations": 3060,
+   "missing_birth_date": {},
+   "by_position": {
+    "QB": 540,
+    "RB": 900,
+    "WR": 1080,
+    "TE": 540
+   }
+  },
+  "tight": {
+   "observations": 1980,
+   "missing_birth_date": {},
+   "by_position": {
+    "QB": 360,
+    "RB": 540,
+    "WR": 720,
+    "TE": 360
+   }
+  },
+  "broad": {
+   "observations": 3108,
+   "missing_birth_date": {},
+   "by_position": {
+    "QB": 513,
+    "RB": 868,
+    "WR": 1288,
+    "TE": 439
+   }
+  }
+ },
+ "positions": {
+  "QB": {
+   "current": [
+    36,
+    39
+   ],
+   "by_age_primary": {
+    "21": {
+     "n": 11,
+     "players": 11,
+     "median_total_ret": 1.116,
+     "mean_total_ret": 1.118,
+     "returners": 11,
+     "median_ppg_ret_returners": 0.931,
+     "survival": 0.818,
+     "severe_loss": 0.182,
+     "median_total_ret_ci": [
+      0.8,
+      1.485
+     ],
+     "survival_ci": [
+      0.545,
+      1.0
+     ]
+    },
+    "22": {
+     "n": 37,
+     "players": 37,
+     "median_total_ret": 0.888,
+     "mean_total_ret": 1.056,
+     "returners": 35,
+     "median_ppg_ret_returners": 1.002,
+     "survival": 0.838,
+     "severe_loss": 0.162,
+     "median_total_ret_ci": [
+      0.794,
+      1.156
+     ],
+     "survival_ci": [
+      0.703,
+      0.946
+     ]
+    },
+    "23": {
+     "n": 52,
+     "players": 52,
+     "median_total_ret": 0.912,
+     "mean_total_ret": 0.986,
+     "returners": 52,
+     "median_ppg_ret_returners": 0.997,
+     "survival": 0.808,
+     "severe_loss": 0.192,
+     "median_total_ret_ci": [
+      0.796,
+      1.152
+     ],
+     "survival_ci": [
+      0.692,
+      0.904
+     ]
+    },
+    "24": {
+     "n": 53,
+     "players": 53,
+     "median_total_ret": 0.755,
+     "mean_total_ret": 0.747,
+     "returners": 48,
+     "median_ppg_ret_returners": 0.957,
+     "survival": 0.774,
+     "severe_loss": 0.302,
+     "median_total_ret_ci": [
+      0.553,
+      0.963
+     ],
+     "survival_ci": [
+      0.66,
+      0.887
+     ]
+    },
+    "25": {
+     "n": 50,
+     "players": 50,
+     "median_total_ret": 0.729,
+     "mean_total_ret": 0.692,
+     "returners": 45,
+     "median_ppg_ret_returners": 0.948,
+     "survival": 0.6,
+     "severe_loss": 0.36,
+     "median_total_ret_ci": [
+      0.485,
+      0.81
+     ],
+     "survival_ci": [
+      0.46,
+      0.74
+     ]
+    },
+    "26": {
+     "n": 38,
+     "players": 38,
+     "median_total_ret": 0.974,
+     "mean_total_ret": 0.967,
+     "returners": 34,
+     "median_ppg_ret_returners": 0.996,
+     "survival": 0.737,
+     "severe_loss": 0.263,
+     "median_total_ret_ci": [
+      0.719,
+      1.066
+     ],
+     "survival_ci": [
+      0.579,
+      0.868
+     ]
+    },
+    "27": {
+     "n": 41,
+     "players": 41,
+     "median_total_ret": 0.859,
+     "mean_total_ret": 0.849,
+     "returners": 41,
+     "median_ppg_ret_returners": 0.89,
+     "survival": 0.756,
+     "severe_loss": 0.317,
+     "median_total_ret_ci": [
+      0.648,
+      1.008
+     ],
+     "survival_ci": [
+      0.634,
+      0.878
+     ]
+    },
+    "28": {
+     "n": 39,
+     "players": 39,
+     "median_total_ret": 0.62,
+     "mean_total_ret": 0.68,
+     "returners": 34,
+     "median_ppg_ret_returners": 0.947,
+     "survival": 0.641,
+     "severe_loss": 0.436,
+     "median_total_ret_ci": [
+      0.421,
+      0.959
+     ],
+     "survival_ci": [
+      0.487,
+      0.795
+     ]
+    },
+    "29": {
+     "n": 29,
+     "players": 29,
+     "median_total_ret": 0.812,
+     "mean_total_ret": 0.779,
+     "returners": 29,
+     "median_ppg_ret_returners": 0.949,
+     "survival": 0.759,
+     "severe_loss": 0.241,
+     "median_total_ret_ci": [
+      0.644,
+      0.913
+     ],
+     "survival_ci": [
+      0.586,
+      0.897
+     ]
+    },
+    "30": {
+     "n": 28,
+     "players": 28,
+     "median_total_ret": 0.859,
+     "mean_total_ret": 0.952,
+     "returners": 28,
+     "median_ppg_ret_returners": 0.953,
+     "survival": 0.786,
+     "severe_loss": 0.25,
+     "median_total_ret_ci": [
+      0.777,
+      1.198
+     ],
+     "survival_ci": [
+      0.643,
+      0.929
+     ]
+    },
+    "31": {
+     "n": 29,
+     "players": 29,
+     "median_total_ret": 0.763,
+     "mean_total_ret": 0.863,
+     "returners": 27,
+     "median_ppg_ret_returners": 0.882,
+     "survival": 0.793,
+     "severe_loss": 0.276,
+     "median_total_ret_ci": [
+      0.656,
+      1.101
+     ],
+     "survival_ci": [
+      0.621,
+      0.931
+     ]
+    },
+    "32": {
+     "n": 24,
+     "players": 24,
+     "median_total_ret": 0.768,
+     "mean_total_ret": 0.773,
+     "returners": 22,
+     "median_ppg_ret_returners": 0.966,
+     "survival": 0.792,
+     "severe_loss": 0.25,
+     "median_total_ret_ci": [
+      0.626,
+      0.969
+     ],
+     "survival_ci": [
+      0.625,
+      0.958
+     ]
+    },
+    "33": {
+     "n": 21,
+     "players": 21,
+     "median_total_ret": 0.754,
+     "mean_total_ret": 0.867,
+     "returners": 20,
+     "median_ppg_ret_returners": 0.931,
+     "survival": 0.905,
+     "severe_loss": 0.286,
+     "median_total_ret_ci": [
+      0.554,
+      1.035
+     ],
+     "survival_ci": [
+      0.762,
+      1.0
+     ]
+    },
+    "34": {
+     "n": 24,
+     "players": 24,
+     "median_total_ret": 0.726,
+     "mean_total_ret": 0.797,
+     "returners": 20,
+     "median_ppg_ret_returners": 0.958,
+     "survival": 0.583,
+     "severe_loss": 0.375,
+     "median_total_ret_ci": [
+      0.23,
+      0.982
+     ],
+     "survival_ci": [
+      0.375,
+      0.792
+     ]
+    },
+    "35": {
+     "n": 14,
+     "players": 14,
+     "median_total_ret": 0.943,
+     "mean_total_ret": 0.938,
+     "returners": 14,
+     "median_ppg_ret_returners": 0.833,
+     "survival": 0.929,
+     "severe_loss": 0.143,
+     "median_total_ret_ci": [
+      0.788,
+      1.116
+     ],
+     "survival_ci": [
+      0.786,
+      1.0
+     ]
+    },
+    "36": {
+     "n": 15,
+     "players": 15,
+     "median_total_ret": 0.697,
+     "mean_total_ret": 0.729,
+     "returners": 14,
+     "median_ppg_ret_returners": 0.944,
+     "survival": 0.733,
+     "severe_loss": 0.333,
+     "median_total_ret_ci": [
+      0.421,
+      1.092
+     ],
+     "survival_ci": [
+      0.533,
+      0.933
+     ]
+    },
+    "37": {
+     "n": 11,
+     "players": 11,
+     "median_total_ret": 0.227,
+     "mean_total_ret": 0.451,
+     "returners": 9,
+     "median_ppg_ret_returners": 0.763,
+     "survival": 0.455,
+     "severe_loss": 0.545,
+     "median_total_ret_ci": [
+      0.005,
+      0.79
+     ],
+     "survival_ci": [
+      0.182,
+      0.727
+     ]
+    },
+    "38": {
+     "n": 8,
+     "players": 8,
+     "median_total_ret": 0.522,
+     "mean_total_ret": 0.513,
+     "returners": 7,
+     "median_ppg_ret_returners": 0.702,
+     "survival": 0.625,
+     "severe_loss": 0.5,
+     "median_total_ret_ci": [
+      0.0,
+      0.899
+     ],
+     "survival_ci": [
+      0.25,
+      0.875
+     ]
+    },
+    "39": {
+     "n": 6,
+     "players": 6,
+     "median_total_ret": 0.369,
+     "mean_total_ret": 0.561,
+     "returners": 3,
+     "median_ppg_ret_returners": 0.858,
+     "survival": 0.5,
+     "severe_loss": 0.5,
+     "median_total_ret_ci": [
+      0.0,
+      1.313
+     ],
+     "survival_ci": [
+      0.167,
+      0.833
+     ]
+    },
+    "40": {
+     "n": 4,
+     "players": 4,
+     "median_total_ret": 0.908,
+     "mean_total_ret": 0.691,
+     "returners": 3,
+     "median_ppg_ret_returners": 0.938,
+     "survival": 0.75,
+     "severe_loss": 0.25,
+     "median_total_ret_ci": null,
+     "survival_ci": null
+    },
+    "41": {
+     "n": 2,
+     "players": 2,
+     "median_total_ret": 0.47,
+     "mean_total_ret": 0.47,
+     "returners": 1,
+     "median_ppg_ret_returners": 0.939,
+     "survival": 0.5,
+     "severe_loss": 0.5,
+     "median_total_ret_ci": null,
+     "survival_ci": null
+    },
+    "42": {
+     "n": 1,
+     "players": 1,
+     "median_total_ret": 1.282,
+     "mean_total_ret": 1.282,
+     "returners": 1,
+     "median_ppg_ret_returners": 1.282,
+     "survival": 1.0,
+     "severe_loss": 0.0,
+     "median_total_ret_ci": null,
+     "survival_ci": null
+    },
+    "43": {
+     "n": 1,
+     "players": 1,
+     "median_total_ret": 1.109,
+     "mean_total_ret": 1.109,
+     "returners": 1,
+     "median_ppg_ret_returners": 1.044,
+     "survival": 1.0,
+     "severe_loss": 0.0,
+     "median_total_ret_ci": null,
+     "survival_ci": null
+    },
+    "44": {
+     "n": 1,
+     "players": 1,
+     "median_total_ret": 0.725,
+     "mean_total_ret": 0.725,
+     "returners": 1,
+     "median_ppg_ret_returners": 0.725,
+     "survival": 1.0,
+     "severe_loss": 0.0,
+     "median_total_ret_ci": null,
+     "survival_ci": null
+    },
+    "45": {
+     "n": 1,
+     "players": 1,
+     "median_total_ret": 0.0,
+     "mean_total_ret": 0.0,
+     "returners": 0,
+     "median_ppg_ret_returners": null,
+     "survival": 0.0,
+     "severe_loss": 1.0,
+     "median_total_ret_ci": null,
+     "survival_ci": null
+    }
+   },
+   "current_bands": {
+    "all_2010_2024": {
+     "low": {
+      "n": 490,
+      "players": 126,
+      "median_total_ret": 0.834,
+      "mean_total_ret": 0.853,
+      "returners": 460,
+      "median_ppg_ret_returners": 0.947,
+      "survival": 0.753,
+      "severe_loss": 0.28,
+      "median_total_ret_ci": [
+       0.778,
+       0.885
+      ],
+      "survival_ci": [
+       0.695,
+       0.8
+      ]
+     },
+     "moderate": {
+      "n": 34,
+      "players": 18,
+      "median_total_ret": 0.666,
+      "mean_total_ret": 0.588,
+      "returners": 30,
+      "median_ppg_ret_returners": 0.824,
+      "survival": 0.618,
+      "severe_loss": 0.441,
+      "median_total_ret_ci": [
+       0.292,
+       0.79
+      ],
+      "survival_ci": [
+       0.452,
+       0.763
+      ]
+     },
+     "high": {
+      "n": 16,
+      "players": 8,
+      "median_total_ret": 0.811,
+      "mean_total_ret": 0.636,
+      "returners": 10,
+      "median_ppg_ret_returners": 0.939,
+      "survival": 0.625,
+      "severe_loss": 0.375,
+      "median_total_ret_ci": [
+       0.0,
+       0.944
+      ],
+      "survival_ci": [
+       0.25,
+       0.8
+      ]
+     }
+    },
+    "recent_2016_2024": {
+     "low": {
+      "n": 288,
+      "players": 89,
+      "median_total_ret": 0.81,
+      "mean_total_ret": 0.853,
+      "returners": 273,
+      "median_ppg_ret_returners": 0.944,
+      "survival": 0.74,
+      "severe_loss": 0.267,
+      "median_total_ret_ci": [
+       0.754,
+       0.888
+      ],
+      "survival_ci": [
+       0.668,
+       0.801
+      ]
+     },
+     "moderate": {
+      "n": 23,
+      "players": 13,
+      "median_total_ret": 0.635,
+      "mean_total_ret": 0.557,
+      "returners": 19,
+      "median_ppg_ret_returners": 0.826,
+      "survival": 0.609,
+      "severe_loss": 0.435,
+      "median_total_ret_ci": [
+       0.227,
+       0.816
+      ],
+      "survival_ci": [
+       0.478,
+       0.727
+      ]
+     },
+     "high": {
+      "n": 13,
+      "players": 5,
+      "median_total_ret": 0.932,
+      "mean_total_ret": 0.783,
+      "returners": 10,
+      "median_ppg_ret_returners": 0.939,
+      "survival": 0.769,
+      "severe_loss": 0.231,
+      "median_total_ret_ci": [
+       0.0,
+       1.109
+      ],
+      "survival_ci": [
+       0.429,
+       0.909
+      ]
+     }
+    },
+    "development": {
+     "low": {
+      "n": 329,
+      "players": 97,
+      "median_total_ret": 0.837,
+      "mean_total_ret": 0.853,
+      "returners": 304,
+      "median_ppg_ret_returners": 0.959,
+      "survival": 0.751,
+      "severe_loss": 0.283,
+      "median_total_ret_ci": [
+       0.786,
+       0.903
+      ],
+      "survival_ci": [
+       0.686,
+       0.802
+      ]
+     },
+     "moderate": {
+      "n": 22,
+      "players": 12,
+      "median_total_ret": 0.693,
+      "mean_total_ret": 0.622,
+      "returners": 21,
+      "median_ppg_ret_returners": 0.902,
+      "survival": 0.636,
+      "severe_loss": 0.455,
+      "median_total_ret_ci": [
+       0.197,
+       0.826
+      ],
+      "survival_ci": [
+       0.333,
+       0.852
+      ]
+     },
+     "high": {
+      "n": 9,
+      "players": 5,
+      "median_total_ret": 0.932,
+      "mean_total_ret": 0.665,
+      "returners": 6,
+      "median_ppg_ret_returners": 0.944,
+      "survival": 0.667,
+      "severe_loss": 0.333,
+      "median_total_ret_ci": [
+       0.0,
+       0.949
+      ],
+      "survival_ci": [
+       0.0,
+       0.933
+      ]
+     }
+    },
+    "validation": {
+     "low": {
+      "n": 161,
+      "players": 61,
+      "median_total_ret": 0.793,
+      "mean_total_ret": 0.855,
+      "returners": 156,
+      "median_ppg_ret_returners": 0.928,
+      "survival": 0.758,
+      "severe_loss": 0.273,
+      "median_total_ret_ci": [
+       0.729,
+       0.903
+      ],
+      "survival_ci": [
+       0.674,
+       0.826
+      ]
+     },
+     "moderate": {
+      "n": 12,
+      "players": 9,
+      "median_total_ret": 0.642,
+      "mean_total_ret": 0.526,
+      "returners": 9,
+      "median_ppg_ret_returners": 0.765,
+      "survival": 0.583,
+      "severe_loss": 0.417,
+      "median_total_ret_ci": [
+       0.0,
+       0.839
+      ],
+      "survival_ci": [
+       0.364,
+       0.8
+      ]
+     },
+     "high": {
+      "n": 7,
+      "players": 5,
+      "median_total_ret": 0.725,
+      "mean_total_ret": 0.6,
+      "returners": 4,
+      "median_ppg_ret_returners": 0.868,
+      "survival": 0.571,
+      "severe_loss": 0.429,
+      "median_total_ret_ci": [
+       0.0,
+       1.481
+      ],
+      "survival_ci": [
+       0.2,
+       0.857
+      ]
+     }
+    },
+    "validation_excl_2020_to_2021": {
+     "low": {
+      "n": 132,
+      "players": 56,
+      "median_total_ret": 0.771,
+      "mean_total_ret": 0.846,
+      "returners": 128,
+      "median_ppg_ret_returners": 0.94,
+      "survival": 0.75,
+      "severe_loss": 0.28,
+      "median_total_ret_ci": [
+       0.672,
+       0.903
+      ],
+      "survival_ci": [
+       0.658,
+       0.825
+      ]
+     },
+     "moderate": {
+      "n": 7,
+      "players": 5,
+      "median_total_ret": 0.697,
+      "mean_total_ret": 0.66,
+      "returners": 6,
+      "median_ppg_ret_returners": 0.762,
+      "survival": 0.714,
+      "severe_loss": 0.286,
+      "median_total_ret_ci": [
+       0.587,
+       1.308
+      ],
+      "survival_ci": [
+       0.556,
+       1.0
+      ]
+     },
+     "high": {
+      "n": 5,
+      "players": 4,
+      "median_total_ret": 0.725,
+      "mean_total_ret": 0.618,
+      "returners": 3,
+      "median_ppg_ret_returners": 0.797,
+      "survival": 0.6,
+      "severe_loss": 0.4,
+      "median_total_ret_ci": null,
+      "survival_ci": null
+     }
+    },
+    "tight_cohort": {
+     "low": {
+      "n": 322,
+      "players": 86,
+      "median_total_ret": 0.883,
+      "mean_total_ret": 0.842,
+      "returners": 313,
+      "median_ppg_ret_returners": 0.934,
+      "survival": 0.727,
+      "severe_loss": 0.199,
+      "median_total_ret_ci": [
+       0.825,
+       0.924
+      ],
+      "survival_ci": [
+       0.662,
+       0.782
+      ]
+     },
+     "moderate": {
+      "n": 26,
+      "players": 14,
+      "median_total_ret": 0.757,
+      "mean_total_ret": 0.708,
+      "returners": 25,
+      "median_ppg_ret_returners": 0.902,
+      "survival": 0.577,
+      "severe_loss": 0.308,
+      "median_total_ret_ci": [
+       0.587,
+       0.826
+      ],
+      "survival_ci": [
+       0.368,
+       0.731
+      ]
+     },
+     "high": {
+      "n": 12,
+      "players": 4,
+      "median_total_ret": 0.908,
+      "mean_total_ret": 0.725,
+      "returners": 9,
+      "median_ppg_ret_returners": 0.939,
+      "survival": 0.75,
+      "severe_loss": 0.25,
+      "median_total_ret_ci": null,
+      "survival_ci": null
+     }
+    },
+    "broad_cohort": {
+     "low": {
+      "n": 466,
+      "players": 127,
+      "median_total_ret": 0.825,
+      "mean_total_ret": 0.819,
+      "returners": 441,
+      "median_ppg_ret_returners": 0.936,
+      "survival": 0.732,
+      "severe_loss": 0.288,
+      "median_total_ret_ci": [
+       0.773,
+       0.883
+      ],
+      "survival_ci": [
+       0.672,
+       0.78
+      ]
+     },
+     "moderate": {
+      "n": 32,
+      "players": 17,
+      "median_total_ret": 0.666,
+      "mean_total_ret": 0.594,
+      "returners": 29,
+      "median_ppg_ret_returners": 0.826,
+      "survival": 0.594,
+      "severe_loss": 0.438,
+      "median_total_ret_ci": [
+       0.285,
+       0.79
+      ],
+      "survival_ci": [
+       0.407,
+       0.756
+      ]
+     },
+     "high": {
+      "n": 15,
+      "players": 7,
+      "median_total_ret": 0.738,
+      "mean_total_ret": 0.58,
+      "returners": 9,
+      "median_ppg_ret_returners": 0.939,
+      "survival": 0.6,
+      "severe_loss": 0.4,
+      "median_total_ret_ci": [
+       0.0,
+       0.939
+      ],
+      "survival_ci": [
+       0.0,
+       0.789
+      ]
+     }
+    }
+   },
+   "current_dev_band_counts": {
+    "low": 329,
+    "moderate": 22,
+    "high": 9
+   },
+   "current_meets_min_band_n": false,
+   "current_rank_among_valid_candidates": null,
+   "valid_candidates": 5,
+   "top_candidates_dev": [
+    {
+     "decline": 32,
+     "cliff": 37,
+     "counts": {
+      "low": 271,
+      "moderate": 68,
+      "high": 21
+     },
+     "dev_brier_severe": 0.20662,
+     "dev_severe_by_band": {
+      "low": 0.284,
+      "moderate": 0.294,
+      "high": 0.429
+     }
+    },
+    {
+     "decline": 33,
+     "cliff": 37,
+     "counts": {
+      "low": 287,
+      "moderate": 52,
+      "high": 21
+     },
+     "dev_brier_severe": 0.20663,
+     "dev_severe_by_band": {
+      "low": 0.286,
+      "moderate": 0.288,
+      "high": 0.429
+     }
+    },
+    {
+     "decline": 34,
+     "cliff": 37,
+     "counts": {
+      "low": 301,
+      "moderate": 38,
+      "high": 21
+     },
+     "dev_brier_severe": 0.20663,
+     "dev_severe_by_band": {
+      "low": 0.286,
+      "moderate": 0.289,
+      "high": 0.429
+     }
+    },
+    {
+     "decline": 32,
+     "cliff": 35,
+     "counts": {
+      "low": 271,
+      "moderate": 48,
+      "high": 41
+     },
+     "dev_brier_severe": 0.20737,
+     "dev_severe_by_band": {
+      "low": 0.284,
+      "moderate": 0.312,
+      "high": 0.341
+     }
+    },
+    {
+     "decline": 33,
+     "cliff": 35,
+     "counts": {
+      "low": 287,
+      "moderate": 32,
+      "high": 41
+     },
+     "dev_brier_severe": 0.20741,
+     "dev_severe_by_band": {
+      "low": 0.286,
+      "moderate": 0.312,
+      "high": 0.341
+     }
+    }
+   ],
+   "best_dev_candidate": [
+    32,
+    37
+   ],
+   "best_candidate_bands": {
+    "all_2010_2024": {
+     "low": {
+      "n": 407,
+      "players": 120,
+      "median_total_ret": 0.834,
+      "mean_total_ret": 0.858,
+      "returners": 384,
+      "median_ppg_ret_returners": 0.947,
+      "survival": 0.747,
+      "severe_loss": 0.28,
+      "median_total_ret_ci": [
+       0.784,
+       0.886
+      ],
+      "survival_ci": [
+       0.689,
+       0.797
+      ]
+     },
+     "moderate": {
+      "n": 98,
+      "players": 31,
+      "median_total_ret": 0.788,
+      "mean_total_ret": 0.816,
+      "returners": 90,
+      "median_ppg_ret_returners": 0.938,
+      "survival": 0.776,
+      "severe_loss": 0.286,
+      "median_total_ret_ci": [
+       0.663,
+       0.9
+      ],
+      "survival_ci": [
+       0.674,
+       0.857
+      ]
+     },
+     "high": {
+      "n": 35,
+      "players": 16,
+      "median_total_ret": 0.725,
+      "mean_total_ret": 0.55,
+      "returners": 26,
+      "median_ppg_ret_returners": 0.826,
+      "survival": 0.571,
+      "severe_loss": 0.457,
+      "median_total_ret_ci": [
+       0.005,
+       0.874
+      ],
+      "survival_ci": [
+       0.286,
+       0.729
+      ]
+     }
+    },
+    "validation": {
+     "low": {
+      "n": 136,
+      "players": 55,
+      "median_total_ret": 0.822,
+      "mean_total_ret": 0.869,
+      "returners": 133,
+      "median_ppg_ret_returners": 0.934,
+      "survival": 0.757,
+      "severe_loss": 0.272,
+      "median_total_ret_ci": [
+       0.729,
+       0.944
+      ],
+      "survival_ci": [
+       0.664,
+       0.836
+      ]
+     },
+     "moderate": {
+      "n": 30,
+      "players": 12,
+      "median_total_ret": 0.685,
+      "mean_total_ret": 0.778,
+      "returners": 27,
+      "median_ppg_ret_returners": 0.914,
+      "survival": 0.767,
+      "severe_loss": 0.267,
+      "median_total_ret_ci": [
+       0.601,
+       0.883
+      ],
+      "survival_ci": [
+       0.6,
+       0.895
+      ]
+     },
+     "high": {
+      "n": 14,
+      "players": 8,
+      "median_total_ret": 0.362,
+      "mean_total_ret": 0.48,
+      "returners": 9,
+      "median_ppg_ret_returners": 0.725,
+      "survival": 0.5,
+      "severe_loss": 0.5,
+      "median_total_ret_ci": [
+       0.0,
+       0.883
+      ],
+      "survival_ci": [
+       0.222,
+       0.7
+      ]
+     }
+    },
+    "tight_cohort": {
+     "low": {
+      "n": 264,
+      "players": 81,
+      "median_total_ret": 0.883,
+      "mean_total_ret": 0.848,
+      "returners": 257,
+      "median_ppg_ret_returners": 0.934,
+      "survival": 0.727,
+      "severe_loss": 0.193,
+      "median_total_ret_ci": [
+       0.822,
+       0.925
+      ],
+      "survival_ci": [
+       0.659,
+       0.788
+      ]
+     },
+     "moderate": {
+      "n": 70,
+      "players": 24,
+      "median_total_ret": 0.873,
+      "mean_total_ret": 0.827,
+      "returners": 68,
+      "median_ppg_ret_returners": 0.938,
+      "survival": 0.7,
+      "severe_loss": 0.214,
+      "median_total_ret_ci": [
+       0.754,
+       0.929
+      ],
+      "survival_ci": [
+       0.576,
+       0.793
+      ]
+     },
+     "high": {
+      "n": 26,
+      "players": 9,
+      "median_total_ret": 0.757,
+      "mean_total_ret": 0.638,
+      "returners": 22,
+      "median_ppg_ret_returners": 0.882,
+      "survival": 0.654,
+      "severe_loss": 0.346,
+      "median_total_ret_ci": [
+       0.164,
+       0.939
+      ],
+      "survival_ci": [
+       0.357,
+       0.78
+      ]
+     }
+    },
+    "recent_2016_2024": {
+     "low": {
+      "n": 240,
+      "players": 81,
+      "median_total_ret": 0.816,
+      "mean_total_ret": 0.848,
+      "returners": 229,
+      "median_ppg_ret_returners": 0.936,
+      "survival": 0.729,
+      "severe_loss": 0.275,
+      "median_total_ret_ci": [
+       0.745,
+       0.889
+      ],
+      "survival_ci": [
+       0.652,
+       0.795
+      ]
+     },
+     "moderate": {
+      "n": 58,
+      "players": 20,
+      "median_total_ret": 0.768,
+      "mean_total_ret": 0.845,
+      "returners": 53,
+      "median_ppg_ret_returners": 0.95,
+      "survival": 0.793,
+      "severe_loss": 0.241,
+      "median_total_ret_ci": [
+       0.635,
+       0.883
+      ],
+      "survival_ci": [
+       0.673,
+       0.891
+      ]
+     },
+     "high": {
+      "n": 26,
+      "players": 11,
+      "median_total_ret": 0.764,
+      "mean_total_ret": 0.615,
+      "returners": 20,
+      "median_ppg_ret_returners": 0.856,
+      "survival": 0.615,
+      "severe_loss": 0.385,
+      "median_total_ret_ci": [
+       0.053,
+       0.944
+      ],
+      "survival_ci": [
+       0.353,
+       0.75
+      ]
+     }
+    }
+   },
+   "validation_brier": {
+    "severe": {
+     "no_age_model": 0.20546,
+     "current": 0.20389,
+     "candidate": 0.2023,
+     "current_minus_no_age_ci": [
+      -0.007,
+      0.003
+     ],
+     "candidate_minus_current_ci": [
+      -0.005,
+      0.002
+     ]
+    },
+    "survive": {
+     "no_age_model": 0.19294,
+     "current": 0.19049,
+     "candidate": 0.18942,
+     "current_minus_no_age_ci": [
+      -0.006,
+      0.001
+     ],
+     "candidate_minus_current_ci": [
+      -0.005,
+      0.003
+     ]
+    }
+   }
+  },
+  "RB": {
+   "current": [
+    27,
+    29
+   ],
+   "by_age_primary": {
+    "20": {
+     "n": 1,
+     "players": 1,
+     "median_total_ret": 0.189,
+     "mean_total_ret": 0.189,
+     "returners": 1,
+     "median_ppg_ret_returners": 0.803,
+     "survival": 0.0,
+     "severe_loss": 1.0,
+     "median_total_ret_ci": null,
+     "survival_ci": null
+    },
+    "21": {
+     "n": 42,
+     "players": 42,
+     "median_total_ret": 0.876,
+     "mean_total_ret": 0.933,
+     "returners": 41,
+     "median_ppg_ret_returners": 0.889,
+     "survival": 0.762,
+     "severe_loss": 0.214,
+     "median_total_ret_ci": [
+      0.676,
+      1.077
+     ],
+     "survival_ci": [
+      0.619,
+      0.881
+     ]
+    },
+    "22": {
+     "n": 96,
+     "players": 96,
+     "median_total_ret": 0.836,
+     "mean_total_ret": 0.935,
+     "returners": 92,
+     "median_ppg_ret_returners": 0.982,
+     "survival": 0.74,
+     "severe_loss": 0.219,
+     "median_total_ret_ci": [
+      0.74,
+      0.958
+     ],
+     "survival_ci": [
+      0.646,
+      0.823
+     ]
+    },
+    "23": {
+     "n": 140,
+     "players": 140,
+     "median_total_ret": 0.83,
+     "mean_total_ret": 0.917,
+     "returners": 138,
+     "median_ppg_ret_returners": 0.842,
+     "survival": 0.736,
+     "severe_loss": 0.271,
+     "median_total_ret_ci": [
+      0.666,
+      0.972
+     ],
+     "survival_ci": [
+      0.664,
+      0.807
+     ]
+    },
+    "24": {
+     "n": 143,
+     "players": 143,
+     "median_total_ret": 0.724,
+     "mean_total_ret": 0.775,
+     "returners": 136,
+     "median_ppg_ret_returners": 0.816,
+     "survival": 0.65,
+     "severe_loss": 0.364,
+     "median_total_ret_ci": [
+      0.572,
+      0.814
+     ],
+     "survival_ci": [
+      0.573,
+      0.734
+     ]
+    },
+    "25": {
+     "n": 126,
+     "players": 126,
+     "median_total_ret": 0.705,
+     "mean_total_ret": 0.85,
+     "returners": 117,
+     "median_ppg_ret_returners": 0.819,
+     "survival": 0.643,
+     "severe_loss": 0.325,
+     "median_total_ret_ci": [
+      0.596,
+      0.881
+     ],
+     "survival_ci": [
+      0.556,
+      0.722
+     ]
+    },
+    "26": {
+     "n": 92,
+     "players": 92,
+     "median_total_ret": 0.732,
+     "mean_total_ret": 0.752,
+     "returners": 85,
+     "median_ppg_ret_returners": 0.828,
+     "survival": 0.652,
+     "severe_loss": 0.348,
+     "median_total_ret_ci": [
+      0.532,
+      0.868
+     ],
+     "survival_ci": [
+      0.554,
+      0.75
+     ]
+    },
+    "27": {
+     "n": 80,
+     "players": 80,
+     "median_total_ret": 0.705,
+     "mean_total_ret": 0.789,
+     "returners": 75,
+     "median_ppg_ret_returners": 0.806,
+     "survival": 0.688,
+     "severe_loss": 0.375,
+     "median_total_ret_ci": [
+      0.524,
+      0.878
+     ],
+     "survival_ci": [
+      0.575,
+      0.787
+     ]
+    },
+    "28": {
+     "n": 69,
+     "players": 69,
+     "median_total_ret": 0.477,
+     "mean_total_ret": 0.641,
+     "returners": 63,
+     "median_ppg_ret_returners": 0.802,
+     "survival": 0.551,
+     "severe_loss": 0.507,
+     "median_total_ret_ci": [
+      0.398,
+      0.789
+     ],
+     "survival_ci": [
+      0.435,
+      0.667
+     ]
+    },
+    "29": {
+     "n": 40,
+     "players": 40,
+     "median_total_ret": 0.461,
+     "mean_total_ret": 0.499,
+     "returners": 32,
+     "median_ppg_ret_returners": 0.679,
+     "survival": 0.475,
+     "severe_loss": 0.575,
+     "median_total_ret_ci": [
+      0.172,
+      0.767
+     ],
+     "survival_ci": [
+      0.325,
+      0.625
+     ]
+    },
+    "30": {
+     "n": 26,
+     "players": 26,
+     "median_total_ret": 0.562,
+     "mean_total_ret": 0.567,
+     "returners": 23,
+     "median_ppg_ret_returners": 0.798,
+     "survival": 0.615,
+     "severe_loss": 0.462,
+     "median_total_ret_ci": [
+      0.402,
+      0.811
+     ],
+     "survival_ci": [
+      0.423,
+      0.808
+     ]
+    },
+    "31": {
+     "n": 21,
+     "players": 21,
+     "median_total_ret": 0.225,
+     "mean_total_ret": 0.43,
+     "returners": 14,
+     "median_ppg_ret_returners": 0.625,
+     "survival": 0.333,
+     "severe_loss": 0.714,
+     "median_total_ret_ci": [
+      0.0,
+      0.464
+     ],
+     "survival_ci": [
+      0.143,
+      0.524
+     ]
+    },
+    "32": {
+     "n": 10,
+     "players": 10,
+     "median_total_ret": 0.478,
+     "mean_total_ret": 0.715,
+     "returners": 9,
+     "median_ppg_ret_returners": 0.842,
+     "survival": 0.6,
+     "severe_loss": 0.5,
+     "median_total_ret_ci": [
+      0.257,
+      1.019
+     ],
+     "survival_ci": [
+      0.3,
+      0.9
+     ]
+    },
+    "33": {
+     "n": 7,
+     "players": 7,
+     "median_total_ret": 0.397,
+     "mean_total_ret": 0.393,
+     "returners": 5,
+     "median_ppg_ret_returners": 0.641,
+     "survival": 0.429,
+     "severe_loss": 0.571,
+     "median_total_ret_ci": [
+      0.0,
+      0.774
+     ],
+     "survival_ci": [
+      0.143,
+      0.714
+     ]
+    },
+    "34": {
+     "n": 3,
+     "players": 3,
+     "median_total_ret": 0.607,
+     "mean_total_ret": 0.488,
+     "returners": 2,
+     "median_ppg_ret_returners": 0.748,
+     "survival": 0.667,
+     "severe_loss": 0.333,
+     "median_total_ret_ci": null,
+     "survival_ci": null
+    },
+    "35": {
+     "n": 2,
+     "players": 2,
+     "median_total_ret": 0.561,
+     "mean_total_ret": 0.561,
+     "returners": 2,
+     "median_ppg_ret_returners": 0.842,
+     "survival": 0.5,
+     "severe_loss": 0.5,
+     "median_total_ret_ci": null,
+     "survival_ci": null
+    },
+    "36": {
+     "n": 1,
+     "players": 1,
+     "median_total_ret": 1.043,
+     "mean_total_ret": 1.043,
+     "returners": 1,
+     "median_ppg_ret_returners": 1.043,
+     "survival": 1.0,
+     "severe_loss": 0.0,
+     "median_total_ret_ci": null,
+     "survival_ci": null
+    },
+    "37": {
+     "n": 1,
+     "players": 1,
+     "median_total_ret": 0.0,
+     "mean_total_ret": 0.0,
+     "returners": 0,
+     "median_ppg_ret_returners": null,
+     "survival": 0.0,
+     "severe_loss": 1.0,
+     "median_total_ret_ci": null,
+     "survival_ci": null
+    }
+   },
+   "current_bands": {
+    "all_2010_2024": {
+     "low": {
+      "n": 640,
+      "players": 252,
+      "median_total_ret": 0.775,
+      "mean_total_ret": 0.851,
+      "returners": 610,
+      "median_ppg_ret_returners": 0.845,
+      "survival": 0.688,
+      "severe_loss": 0.303,
+      "median_total_ret_ci": [
+       0.708,
+       0.814
+      ],
+      "survival_ci": [
+       0.651,
+       0.722
+      ]
+     },
+     "moderate": {
+      "n": 149,
+      "players": 97,
+      "median_total_ret": 0.617,
+      "mean_total_ret": 0.72,
+      "returners": 138,
+      "median_ppg_ret_returners": 0.803,
+      "survival": 0.624,
+      "severe_loss": 0.436,
+      "median_total_ret_ci": [
+       0.474,
+       0.778
+      ],
+      "survival_ci": [
+       0.546,
+       0.701
+      ]
+     },
+     "high": {
+      "n": 111,
+      "players": 56,
+      "median_total_ret": 0.434,
+      "mean_total_ret": 0.516,
+      "returners": 88,
+      "median_ppg_ret_returners": 0.715,
+      "survival": 0.495,
+      "severe_loss": 0.559,
+      "median_total_ret_ci": [
+       0.341,
+       0.604
+      ],
+      "survival_ci": [
+       0.385,
+       0.585
+      ]
+     }
+    },
+    "recent_2016_2024": {
+     "low": {
+      "n": 404,
+      "players": 160,
+      "median_total_ret": 0.799,
+      "mean_total_ret": 0.855,
+      "returners": 387,
+      "median_ppg_ret_returners": 0.875,
+      "survival": 0.72,
+      "severe_loss": 0.267,
+      "median_total_ret_ci": [
+       0.741,
+       0.873
+      ],
+      "survival_ci": [
+       0.672,
+       0.765
+      ]
+     },
+     "moderate": {
+      "n": 76,
+      "players": 55,
+      "median_total_ret": 0.539,
+      "mean_total_ret": 0.628,
+      "returners": 68,
+      "median_ppg_ret_returners": 0.753,
+      "survival": 0.566,
+      "severe_loss": 0.461,
+      "median_total_ret_ci": [
+       0.398,
+       0.718
+      ],
+      "survival_ci": [
+       0.451,
+       0.675
+      ]
+     },
+     "high": {
+      "n": 60,
+      "players": 34,
+      "median_total_ret": 0.435,
+      "mean_total_ret": 0.494,
+      "returners": 46,
+      "median_ppg_ret_returners": 0.691,
+      "survival": 0.483,
+      "severe_loss": 0.583,
+      "median_total_ret_ci": [
+       0.22,
+       0.576
+      ],
+      "survival_ci": [
+       0.346,
+       0.593
+      ]
+     }
+    },
+    "development": {
+     "low": {
+      "n": 416,
+      "players": 186,
+      "median_total_ret": 0.735,
+      "mean_total_ret": 0.841,
+      "returners": 394,
+      "median_ppg_ret_returners": 0.83,
+      "survival": 0.661,
+      "severe_loss": 0.322,
+      "median_total_ret_ci": [
+       0.652,
+       0.805
+      ],
+      "survival_ci": [
+       0.611,
+       0.705
+      ]
+     },
+     "moderate": {
+      "n": 103,
+      "players": 67,
+      "median_total_ret": 0.575,
+      "mean_total_ret": 0.748,
+      "returners": 94,
+      "median_ppg_ret_returners": 0.827,
+      "survival": 0.631,
+      "severe_loss": 0.437,
+      "median_total_ret_ci": [
+       0.46,
+       0.801
+      ],
+      "survival_ci": [
+       0.54,
+       0.718
+      ]
+     },
+     "high": {
+      "n": 81,
+      "players": 40,
+      "median_total_ret": 0.464,
+      "mean_total_ret": 0.533,
+      "returners": 64,
+      "median_ppg_ret_returners": 0.793,
+      "survival": 0.519,
+      "severe_loss": 0.531,
+      "median_total_ret_ci": [
+       0.29,
+       0.763
+      ],
+      "survival_ci": [
+       0.386,
+       0.629
+      ]
+     }
+    },
+    "validation": {
+     "low": {
+      "n": 224,
+      "players": 100,
+      "median_total_ret": 0.836,
+      "mean_total_ret": 0.87,
+      "returners": 216,
+      "median_ppg_ret_returners": 0.882,
+      "survival": 0.737,
+      "severe_loss": 0.268,
+      "median_total_ret_ci": [
+       0.721,
+       0.905
+      ],
+      "survival_ci": [
+       0.667,
+       0.796
+      ]
+     },
+     "moderate": {
+      "n": 46,
+      "players": 33,
+      "median_total_ret": 0.644,
+      "mean_total_ret": 0.659,
+      "returners": 44,
+      "median_ppg_ret_returners": 0.73,
+      "survival": 0.609,
+      "severe_loss": 0.435,
+      "median_total_ret_ci": [
+       0.348,
+       0.84
+      ],
+      "survival_ci": [
+       0.455,
+       0.735
+      ]
+     },
+     "high": {
+      "n": 30,
+      "players": 21,
+      "median_total_ret": 0.373,
+      "mean_total_ret": 0.47,
+      "returners": 24,
+      "median_ppg_ret_returners": 0.615,
+      "survival": 0.433,
+      "severe_loss": 0.633,
+      "median_total_ret_ci": [
+       0.22,
+       0.523
+      ],
+      "survival_ci": [
+       0.24,
+       0.583
+      ]
+     }
+    },
+    "validation_excl_2020_to_2021": {
+     "low": {
+      "n": 179,
+      "players": 90,
+      "median_total_ret": 0.832,
+      "mean_total_ret": 0.862,
+      "returners": 174,
+      "median_ppg_ret_returners": 0.876,
+      "survival": 0.732,
+      "severe_loss": 0.263,
+      "median_total_ret_ci": [
+       0.736,
+       0.905
+      ],
+      "survival_ci": [
+       0.663,
+       0.792
+      ]
+     },
+     "moderate": {
+      "n": 36,
+      "players": 26,
+      "median_total_ret": 0.709,
+      "mean_total_ret": 0.69,
+      "returners": 34,
+      "median_ppg_ret_returners": 0.753,
+      "survival": 0.667,
+      "severe_loss": 0.389,
+      "median_total_ret_ci": [
+       0.398,
+       0.94
+      ],
+      "survival_ci": [
+       0.514,
+       0.805
+      ]
+     },
+     "high": {
+      "n": 25,
+      "players": 18,
+      "median_total_ret": 0.364,
+      "mean_total_ret": 0.464,
+      "returners": 20,
+      "median_ppg_ret_returners": 0.607,
+      "survival": 0.44,
+      "severe_loss": 0.68,
+      "median_total_ret_ci": [
+       0.225,
+       0.486
+      ],
+      "survival_ci": [
+       0.25,
+       0.607
+      ]
+     }
+    },
+    "tight_cohort": {
+     "low": {
+      "n": 388,
+      "players": 173,
+      "median_total_ret": 0.775,
+      "mean_total_ret": 0.795,
+      "returners": 374,
+      "median_ppg_ret_returners": 0.858,
+      "survival": 0.606,
+      "severe_loss": 0.26,
+      "median_total_ret_ci": [
+       0.706,
+       0.825
+      ],
+      "survival_ci": [
+       0.55,
+       0.658
+      ]
+     },
+     "moderate": {
+      "n": 89,
+      "players": 65,
+      "median_total_ret": 0.631,
+      "mean_total_ret": 0.684,
+      "returners": 85,
+      "median_ppg_ret_returners": 0.803,
+      "survival": 0.506,
+      "severe_loss": 0.393,
+      "median_total_ret_ci": [
+       0.477,
+       0.762
+      ],
+      "survival_ci": [
+       0.395,
+       0.602
+      ]
+     },
+     "high": {
+      "n": 63,
+      "players": 33,
+      "median_total_ret": 0.604,
+      "mean_total_ret": 0.61,
+      "returners": 57,
+      "median_ppg_ret_returners": 0.798,
+      "survival": 0.46,
+      "severe_loss": 0.444,
+      "median_total_ret_ci": [
+       0.427,
+       0.783
+      ],
+      "survival_ci": [
+       0.316,
+       0.573
+      ]
+     }
+    },
+    "broad_cohort": {
+     "low": {
+      "n": 609,
+      "players": 246,
+      "median_total_ret": 0.755,
+      "mean_total_ret": 0.819,
+      "returners": 580,
+      "median_ppg_ret_returners": 0.834,
+      "survival": 0.657,
+      "severe_loss": 0.312,
+      "median_total_ret_ci": [
+       0.694,
+       0.805
+      ],
+      "survival_ci": [
+       0.617,
+       0.696
+      ]
+     },
+     "moderate": {
+      "n": 150,
+      "players": 99,
+      "median_total_ret": 0.624,
+      "mean_total_ret": 0.715,
+      "returners": 137,
+      "median_ppg_ret_returners": 0.802,
+      "survival": 0.613,
+      "severe_loss": 0.427,
+      "median_total_ret_ci": [
+       0.501,
+       0.773
+      ],
+      "survival_ci": [
+       0.537,
+       0.688
+      ]
+     },
+     "high": {
+      "n": 109,
+      "players": 57,
+      "median_total_ret": 0.427,
+      "mean_total_ret": 0.501,
+      "returners": 85,
+      "median_ppg_ret_returners": 0.705,
+      "survival": 0.477,
+      "severe_loss": 0.56,
+      "median_total_ret_ci": [
+       0.225,
+       0.59
+      ],
+      "survival_ci": [
+       0.372,
+       0.57
+      ]
+     }
+    }
+   },
+   "current_dev_band_counts": {
+    "low": 416,
+    "moderate": 103,
+    "high": 81
+   },
+   "current_meets_min_band_n": true,
+   "current_rank_among_valid_candidates": 4,
+   "valid_candidates": 19,
+   "top_candidates_dev": [
+    {
+     "decline": 25,
+     "cliff": 28,
+     "counts": {
+      "low": 288,
+      "moderate": 184,
+      "high": 128
+     },
+     "dev_brier_severe": 0.22678,
+     "dev_severe_by_band": {
+      "low": 0.309,
+      "moderate": 0.364,
+      "high": 0.516
+     }
+    },
+    {
+     "decline": 26,
+     "cliff": 28,
+     "counts": {
+      "low": 361,
+      "moderate": 111,
+      "high": 128
+     },
+     "dev_brier_severe": 0.22679,
+     "dev_severe_by_band": {
+      "low": 0.316,
+      "moderate": 0.378,
+      "high": 0.516
+     }
+    },
+    {
+     "decline": 27,
+     "cliff": 28,
+     "counts": {
+      "low": 416,
+      "moderate": 56,
+      "high": 128
+     },
+     "dev_brier_severe": 0.22694,
+     "dev_severe_by_band": {
+      "low": 0.322,
+      "moderate": 0.393,
+      "high": 0.516
+     }
+    },
+    {
+     "decline": 27,
+     "cliff": 29,
+     "counts": {
+      "low": 416,
+      "moderate": 103,
+      "high": 81
+     },
+     "dev_brier_severe": 0.22725,
+     "dev_severe_by_band": {
+      "low": 0.322,
+      "moderate": 0.437,
+      "high": 0.531
+     }
+    },
+    {
+     "decline": 28,
+     "cliff": 29,
+     "counts": {
+      "low": 472,
+      "moderate": 47,
+      "high": 81
+     },
+     "dev_brier_severe": 0.22726,
+     "dev_severe_by_band": {
+      "low": 0.331,
+      "moderate": 0.489,
+      "high": 0.531
+     }
+    }
+   ],
+   "best_dev_candidate": [
+    25,
+    28
+   ],
+   "best_candidate_bands": {
+    "all_2010_2024": {
+     "low": {
+      "n": 422,
+      "players": 218,
+      "median_total_ret": 0.803,
+      "mean_total_ret": 0.873,
+      "returners": 408,
+      "median_ppg_ret_returners": 0.873,
+      "survival": 0.709,
+      "severe_loss": 0.287,
+      "median_total_ret_ci": [
+       0.709,
+       0.873
+      ],
+      "survival_ci": [
+       0.662,
+       0.753
+      ]
+     },
+     "moderate": {
+      "n": 298,
+      "players": 163,
+      "median_total_ret": 0.71,
+      "mean_total_ret": 0.803,
+      "returners": 277,
+      "median_ppg_ret_returners": 0.82,
+      "survival": 0.658,
+      "severe_loss": 0.346,
+      "median_total_ret_ci": [
+       0.638,
+       0.792
+      ],
+      "survival_ci": [
+       0.601,
+       0.715
+      ]
+     },
+     "high": {
+      "n": 180,
+      "players": 85,
+      "median_total_ret": 0.45,
+      "mean_total_ret": 0.564,
+      "returners": 151,
+      "median_ppg_ret_returners": 0.761,
+      "survival": 0.517,
+      "severe_loss": 0.539,
+      "median_total_ret_ci": [
+       0.381,
+       0.582
+      ],
+      "survival_ci": [
+       0.433,
+       0.588
+      ]
+     }
+    },
+    "validation": {
+     "low": {
+      "n": 134,
+      "players": 70,
+      "median_total_ret": 0.848,
+      "mean_total_ret": 0.896,
+      "returners": 132,
+      "median_ppg_ret_returners": 0.882,
+      "survival": 0.769,
+      "severe_loss": 0.239,
+      "median_total_ret_ci": [
+       0.728,
+       0.933
+      ],
+      "survival_ci": [
+       0.686,
+       0.841
+      ]
+     },
+     "moderate": {
+      "n": 114,
+      "players": 66,
+      "median_total_ret": 0.779,
+      "mean_total_ret": 0.792,
+      "returners": 107,
+      "median_ppg_ret_returners": 0.855,
+      "survival": 0.684,
+      "severe_loss": 0.316,
+      "median_total_ret_ci": [
+       0.628,
+       0.862
+      ],
+      "survival_ci": [
+       0.602,
+       0.767
+      ]
+     },
+     "high": {
+      "n": 52,
+      "players": 32,
+      "median_total_ret": 0.399,
+      "mean_total_ret": 0.558,
+      "returners": 45,
+      "median_ppg_ret_returners": 0.644,
+      "survival": 0.481,
+      "severe_loss": 0.596,
+      "median_total_ret_ci": [
+       0.284,
+       0.576
+      ],
+      "survival_ci": [
+       0.347,
+       0.6
+      ]
+     }
+    },
+    "tight_cohort": {
+     "low": {
+      "n": 248,
+      "players": 146,
+      "median_total_ret": 0.808,
+      "mean_total_ret": 0.822,
+      "returners": 244,
+      "median_ppg_ret_returners": 0.873,
+      "survival": 0.625,
+      "severe_loss": 0.234,
+      "median_total_ret_ci": [
+       0.737,
+       0.861
+      ],
+      "survival_ci": [
+       0.558,
+       0.69
+      ]
+     },
+     "moderate": {
+      "n": 188,
+      "players": 112,
+      "median_total_ret": 0.71,
+      "mean_total_ret": 0.747,
+      "returners": 176,
+      "median_ppg_ret_returners": 0.824,
+      "survival": 0.569,
+      "severe_loss": 0.309,
+      "median_total_ret_ci": [
+       0.605,
+       0.793
+      ],
+      "survival_ci": [
+       0.488,
+       0.636
+      ]
+     },
+     "high": {
+      "n": 104,
+      "players": 53,
+      "median_total_ret": 0.549,
+      "mean_total_ret": 0.609,
+      "returners": 96,
+      "median_ppg_ret_returners": 0.802,
+      "survival": 0.452,
+      "severe_loss": 0.462,
+      "median_total_ret_ci": [
+       0.427,
+       0.762
+      ],
+      "survival_ci": [
+       0.337,
+       0.552
+      ]
+     }
+    },
+    "recent_2016_2024": {
+     "low": {
+      "n": 264,
+      "players": 130,
+      "median_total_ret": 0.845,
+      "mean_total_ret": 0.891,
+      "returners": 258,
+      "median_ppg_ret_returners": 0.886,
+      "survival": 0.761,
+      "severe_loss": 0.242,
+      "median_total_ret_ci": [
+       0.772,
+       0.905
+      ],
+      "survival_ci": [
+       0.702,
+       0.813
+      ]
+     },
+     "moderate": {
+      "n": 183,
+      "players": 104,
+      "median_total_ret": 0.681,
+      "mean_total_ret": 0.737,
+      "returners": 167,
+      "median_ppg_ret_returners": 0.804,
+      "survival": 0.623,
+      "severe_loss": 0.344,
+      "median_total_ret_ci": [
+       0.592,
+       0.768
+      ],
+      "survival_ci": [
+       0.548,
+       0.689
+      ]
+     },
+     "high": {
+      "n": 93,
+      "players": 49,
+      "median_total_ret": 0.449,
+      "mean_total_ret": 0.566,
+      "returners": 76,
+      "median_ppg_ret_returners": 0.721,
+      "survival": 0.516,
+      "severe_loss": 0.548,
+      "median_total_ret_ci": [
+       0.35,
+       0.576
+      ],
+      "survival_ci": [
+       0.419,
+       0.6
+      ]
+     }
+    }
+   },
+   "validation_brier": {
+    "severe": {
+     "no_age_model": 0.2227,
+     "current": 0.21058,
+     "candidate": 0.20924,
+     "current_minus_no_age_ci": [
+      -0.021,
+      -0.004
+     ],
+     "candidate_minus_current_ci": [
+      -0.006,
+      0.003
+     ]
+    },
+    "survive": {
+     "no_age_model": 0.21766,
+     "current": 0.21101,
+     "candidate": 0.20941,
+     "current_minus_no_age_ci": [
+      -0.011,
+      -0.003
+     ],
+     "candidate_minus_current_ci": [
+      -0.005,
+      0.002
+     ]
+    }
+   }
+  },
+  "WR": {
+   "current": [
+    30,
+    32
+   ],
+   "by_age_primary": {
+    "20": {
+     "n": 2,
+     "players": 2,
+     "median_total_ret": 1.653,
+     "mean_total_ret": 1.653,
+     "returners": 2,
+     "median_ppg_ret_returners": 1.212,
+     "survival": 1.0,
+     "severe_loss": 0.0,
+     "median_total_ret_ci": null,
+     "survival_ci": null
+    },
+    "21": {
+     "n": 43,
+     "players": 43,
+     "median_total_ret": 0.992,
+     "mean_total_ret": 1.036,
+     "returners": 43,
+     "median_ppg_ret_returners": 1.08,
+     "survival": 0.791,
+     "severe_loss": 0.163,
+     "median_total_ret_ci": [
+      0.832,
+      1.177
+     ],
+     "survival_ci": [
+      0.674,
+      0.907
+     ]
+    },
+    "22": {
+     "n": 98,
+     "players": 98,
+     "median_total_ret": 0.953,
+     "mean_total_ret": 0.966,
+     "returners": 98,
+     "median_ppg_ret_returners": 1.016,
+     "survival": 0.806,
+     "severe_loss": 0.122,
+     "median_total_ret_ci": [
+      0.893,
+      1.069
+     ],
+     "survival_ci": [
+      0.724,
+      0.878
+     ]
+    },
+    "23": {
+     "n": 149,
+     "players": 149,
+     "median_total_ret": 0.757,
+     "mean_total_ret": 0.793,
+     "returners": 143,
+     "median_ppg_ret_returners": 0.882,
+     "survival": 0.631,
+     "severe_loss": 0.248,
+     "median_total_ret_ci": [
+      0.712,
+      0.862
+     ],
+     "survival_ci": [
+      0.557,
+      0.705
+     ]
+    },
+    "24": {
+     "n": 137,
+     "players": 137,
+     "median_total_ret": 0.859,
+     "mean_total_ret": 0.867,
+     "returners": 128,
+     "median_ppg_ret_returners": 0.927,
+     "survival": 0.708,
+     "severe_loss": 0.219,
+     "median_total_ret_ci": [
+      0.792,
+      0.966
+     ],
+     "survival_ci": [
+      0.635,
+      0.781
+     ]
+    },
+    "25": {
+     "n": 141,
+     "players": 141,
+     "median_total_ret": 0.744,
+     "mean_total_ret": 0.796,
+     "returners": 139,
+     "median_ppg_ret_returners": 0.836,
+     "survival": 0.603,
+     "severe_loss": 0.27,
+     "median_total_ret_ci": [
+      0.662,
+      0.822
+     ],
+     "survival_ci": [
+      0.518,
+      0.674
+     ]
+    },
+    "26": {
+     "n": 111,
+     "players": 111,
+     "median_total_ret": 0.82,
+     "mean_total_ret": 0.803,
+     "returners": 109,
+     "median_ppg_ret_returners": 0.837,
+     "survival": 0.649,
+     "severe_loss": 0.234,
+     "median_total_ret_ci": [
+      0.737,
+      0.883
+     ],
+     "survival_ci": [
+      0.55,
+      0.739
+     ]
+    },
+    "27": {
+     "n": 107,
+     "players": 107,
+     "median_total_ret": 0.665,
+     "mean_total_ret": 0.708,
+     "returners": 103,
+     "median_ppg_ret_returners": 0.82,
+     "survival": 0.561,
+     "severe_loss": 0.336,
+     "median_total_ret_ci": [
+      0.59,
+      0.793
+     ],
+     "survival_ci": [
+      0.467,
+      0.645
+     ]
+    },
+    "28": {
+     "n": 74,
+     "players": 74,
+     "median_total_ret": 0.797,
+     "mean_total_ret": 0.739,
+     "returners": 71,
+     "median_ppg_ret_returners": 0.862,
+     "survival": 0.703,
+     "severe_loss": 0.284,
+     "median_total_ret_ci": [
+      0.628,
+      0.893
+     ],
+     "survival_ci": [
+      0.595,
+      0.811
+     ]
+    },
+    "29": {
+     "n": 69,
+     "players": 69,
+     "median_total_ret": 0.722,
+     "mean_total_ret": 0.707,
+     "returners": 63,
+     "median_ppg_ret_returners": 0.753,
+     "survival": 0.609,
+     "severe_loss": 0.29,
+     "median_total_ret_ci": [
+      0.63,
+      0.807
+     ],
+     "survival_ci": [
+      0.493,
+      0.725
+     ]
+    },
+    "30": {
+     "n": 48,
+     "players": 48,
+     "median_total_ret": 0.655,
+     "mean_total_ret": 0.68,
+     "returners": 44,
+     "median_ppg_ret_returners": 0.852,
+     "survival": 0.562,
+     "severe_loss": 0.375,
+     "median_total_ret_ci": [
+      0.481,
+      0.802
+     ],
+     "survival_ci": [
+      0.438,
+      0.708
+     ]
+    },
+    "31": {
+     "n": 35,
+     "players": 35,
+     "median_total_ret": 0.656,
+     "mean_total_ret": 0.721,
+     "returners": 32,
+     "median_ppg_ret_returners": 0.697,
+     "survival": 0.714,
+     "severe_loss": 0.257,
+     "median_total_ret_ci": [
+      0.556,
+      0.757
+     ],
+     "survival_ci": [
+      0.571,
+      0.857
+     ]
+    },
+    "32": {
+     "n": 28,
+     "players": 28,
+     "median_total_ret": 0.727,
+     "mean_total_ret": 0.682,
+     "returners": 26,
+     "median_ppg_ret_returners": 0.841,
+     "survival": 0.607,
+     "severe_loss": 0.429,
+     "median_total_ret_ci": [
+      0.392,
+      0.963
+     ],
+     "survival_ci": [
+      0.429,
+      0.786
+     ]
+    },
+    "33": {
+     "n": 17,
+     "players": 17,
+     "median_total_ret": 0.388,
+     "mean_total_ret": 0.428,
+     "returners": 12,
+     "median_ppg_ret_returners": 0.797,
+     "survival": 0.412,
+     "severe_loss": 0.529,
+     "median_total_ret_ci": [
+      0.0,
+      0.731
+     ],
+     "survival_ci": [
+      0.176,
+      0.647
+     ]
+    },
+    "34": {
+     "n": 9,
+     "players": 9,
+     "median_total_ret": 0.535,
+     "mean_total_ret": 0.636,
+     "returners": 8,
+     "median_ppg_ret_returners": 0.685,
+     "survival": 0.444,
+     "severe_loss": 0.444,
+     "median_total_ret_ci": [
+      0.089,
+      1.379
+     ],
+     "survival_ci": [
+      0.111,
+      0.778
+     ]
+    },
+    "35": {
+     "n": 5,
+     "players": 5,
+     "median_total_ret": 0.6,
+     "mean_total_ret": 0.495,
+     "returners": 3,
+     "median_ppg_ret_returners": 0.925,
+     "survival": 0.6,
+     "severe_loss": 0.4,
+     "median_total_ret_ci": [
+      0.0,
+      0.952
+     ],
+     "survival_ci": [
+      0.2,
+      1.0
+     ]
+    },
+    "36": {
+     "n": 6,
+     "players": 6,
+     "median_total_ret": 0.206,
+     "mean_total_ret": 0.415,
+     "returners": 5,
+     "median_ppg_ret_returners": 0.426,
+     "survival": 0.167,
+     "severe_loss": 0.667,
+     "median_total_ret_ci": [
+      0.084,
+      0.809
+     ],
+     "survival_ci": [
+      0.0,
+      0.5
+     ]
+    },
+    "37": {
+     "n": 1,
+     "players": 1,
+     "median_total_ret": 0.0,
+     "mean_total_ret": 0.0,
+     "returners": 0,
+     "median_ppg_ret_returners": null,
+     "survival": 0.0,
+     "severe_loss": 1.0,
+     "median_total_ret_ci": null,
+     "survival_ci": null
+    }
+   },
+   "current_bands": {
+    "all_2010_2024": {
+     "low": {
+      "n": 931,
+      "players": 326,
+      "median_total_ret": 0.802,
+      "mean_total_ret": 0.816,
+      "returners": 899,
+      "median_ppg_ret_returners": 0.874,
+      "survival": 0.663,
+      "severe_loss": 0.244,
+      "median_total_ret_ci": [
+       0.761,
+       0.839
+      ],
+      "survival_ci": [
+       0.623,
+       0.699
+      ]
+     },
+     "moderate": {
+      "n": 83,
+      "players": 57,
+      "median_total_ret": 0.656,
+      "mean_total_ret": 0.697,
+      "returners": 76,
+      "median_ppg_ret_returners": 0.803,
+      "survival": 0.627,
+      "severe_loss": 0.325,
+      "median_total_ret_ci": [
+       0.532,
+       0.757
+      ],
+      "survival_ci": [
+       0.513,
+       0.725
+      ]
+     },
+     "high": {
+      "n": 66,
+      "players": 35,
+      "median_total_ret": 0.532,
+      "mean_total_ret": 0.561,
+      "returners": 54,
+      "median_ppg_ret_returners": 0.755,
+      "survival": 0.485,
+      "severe_loss": 0.485,
+      "median_total_ret_ci": [
+       0.273,
+       0.694
+      ],
+      "survival_ci": [
+       0.34,
+       0.584
+      ]
+     }
+    },
+    "recent_2016_2024": {
+     "low": {
+      "n": 572,
+      "players": 219,
+      "median_total_ret": 0.811,
+      "mean_total_ret": 0.815,
+      "returners": 556,
+      "median_ppg_ret_returners": 0.873,
+      "survival": 0.673,
+      "severe_loss": 0.227,
+      "median_total_ret_ci": [
+       0.764,
+       0.855
+      ],
+      "survival_ci": [
+       0.627,
+       0.72
+      ]
+     },
+     "moderate": {
+      "n": 48,
+      "players": 34,
+      "median_total_ret": 0.616,
+      "mean_total_ret": 0.64,
+      "returners": 44,
+      "median_ppg_ret_returners": 0.79,
+      "survival": 0.542,
+      "severe_loss": 0.354,
+      "median_total_ret_ci": [
+       0.46,
+       0.757
+      ],
+      "survival_ci": [
+       0.39,
+       0.667
+      ]
+     },
+     "high": {
+      "n": 28,
+      "players": 16,
+      "median_total_ret": 0.586,
+      "mean_total_ret": 0.589,
+      "returners": 23,
+      "median_ppg_ret_returners": 0.84,
+      "survival": 0.464,
+      "severe_loss": 0.464,
+      "median_total_ret_ci": [
+       0.222,
+       0.761
+      ],
+      "survival_ci": [
+       0.286,
+       0.594
+      ]
+     }
+    },
+    "development": {
+     "low": {
+      "n": 609,
+      "players": 232,
+      "median_total_ret": 0.805,
+      "mean_total_ret": 0.826,
+      "returners": 583,
+      "median_ppg_ret_returners": 0.889,
+      "survival": 0.66,
+      "severe_loss": 0.248,
+      "median_total_ret_ci": [
+       0.758,
+       0.848
+      ],
+      "survival_ci": [
+       0.614,
+       0.702
+      ]
+     },
+     "moderate": {
+      "n": 58,
+      "players": 42,
+      "median_total_ret": 0.628,
+      "mean_total_ret": 0.678,
+      "returners": 52,
+      "median_ppg_ret_returners": 0.874,
+      "survival": 0.621,
+      "severe_loss": 0.379,
+      "median_total_ret_ci": [
+       0.444,
+       0.757
+      ],
+      "survival_ci": [
+       0.49,
+       0.738
+      ]
+     },
+     "high": {
+      "n": 53,
+      "players": 28,
+      "median_total_ret": 0.535,
+      "mean_total_ret": 0.559,
+      "returners": 43,
+      "median_ppg_ret_returners": 0.731,
+      "survival": 0.491,
+      "severe_loss": 0.472,
+      "median_total_ret_ci": [
+       0.268,
+       0.731
+      ],
+      "survival_ci": [
+       0.325,
+       0.6
+      ]
+     }
+    },
+    "validation": {
+     "low": {
+      "n": 322,
+      "players": 145,
+      "median_total_ret": 0.798,
+      "mean_total_ret": 0.798,
+      "returners": 316,
+      "median_ppg_ret_returners": 0.861,
+      "survival": 0.668,
+      "severe_loss": 0.236,
+      "median_total_ret_ci": [
+       0.73,
+       0.858
+      ],
+      "survival_ci": [
+       0.6,
+       0.727
+      ]
+     },
+     "moderate": {
+      "n": 25,
+      "players": 17,
+      "median_total_ret": 0.664,
+      "mean_total_ret": 0.743,
+      "returners": 24,
+      "median_ppg_ret_returners": 0.692,
+      "survival": 0.64,
+      "severe_loss": 0.2,
+      "median_total_ret_ci": [
+       0.534,
+       0.766
+      ],
+      "survival_ci": [
+       0.409,
+       0.815
+      ]
+     },
+     "high": {
+      "n": 13,
+      "players": 8,
+      "median_total_ret": 0.471,
+      "mean_total_ret": 0.57,
+      "returners": 11,
+      "median_ppg_ret_returners": 0.824,
+      "survival": 0.462,
+      "severe_loss": 0.538,
+      "median_total_ret_ci": [
+       0.055,
+       0.824
+      ],
+      "survival_ci": [
+       0.273,
+       0.636
+      ]
+     }
+    },
+    "validation_excl_2020_to_2021": {
+     "low": {
+      "n": 258,
+      "players": 133,
+      "median_total_ret": 0.801,
+      "mean_total_ret": 0.8,
+      "returners": 253,
+      "median_ppg_ret_returners": 0.859,
+      "survival": 0.674,
+      "severe_loss": 0.244,
+      "median_total_ret_ci": [
+       0.741,
+       0.859
+      ],
+      "survival_ci": [
+       0.608,
+       0.742
+      ]
+     },
+     "moderate": {
+      "n": 20,
+      "players": 14,
+      "median_total_ret": 0.66,
+      "mean_total_ret": 0.768,
+      "returners": 19,
+      "median_ppg_ret_returners": 0.694,
+      "survival": 0.65,
+      "severe_loss": 0.2,
+      "median_total_ret_ci": [
+       0.53,
+       0.901
+      ],
+      "survival_ci": [
+       0.412,
+       0.833
+      ]
+     },
+     "high": {
+      "n": 10,
+      "players": 8,
+      "median_total_ret": 0.321,
+      "mean_total_ret": 0.404,
+      "returners": 8,
+      "median_ppg_ret_returners": 0.457,
+      "survival": 0.3,
+      "severe_loss": 0.7,
+      "median_total_ret_ci": [
+       0.021,
+       0.643
+      ],
+      "survival_ci": [
+       0.0,
+       0.583
+      ]
+     }
+    },
+    "tight_cohort": {
+     "low": {
+      "n": 616,
+      "players": 220,
+      "median_total_ret": 0.83,
+      "mean_total_ret": 0.823,
+      "returners": 601,
+      "median_ppg_ret_returners": 0.901,
+      "survival": 0.651,
+      "severe_loss": 0.2,
+      "median_total_ret_ci": [
+       0.779,
+       0.861
+      ],
+      "survival_ci": [
+       0.603,
+       0.693
+      ]
+     },
+     "moderate": {
+      "n": 62,
+      "players": 42,
+      "median_total_ret": 0.682,
+      "mean_total_ret": 0.696,
+      "returners": 58,
+      "median_ppg_ret_returners": 0.812,
+      "survival": 0.548,
+      "severe_loss": 0.274,
+      "median_total_ret_ci": [
+       0.614,
+       0.757
+      ],
+      "survival_ci": [
+       0.424,
+       0.656
+      ]
+     },
+     "high": {
+      "n": 42,
+      "players": 25,
+      "median_total_ret": 0.614,
+      "mean_total_ret": 0.597,
+      "returners": 37,
+      "median_ppg_ret_returners": 0.796,
+      "survival": 0.405,
+      "severe_loss": 0.405,
+      "median_total_ret_ci": [
+       0.388,
+       0.731
+      ],
+      "survival_ci": [
+       0.219,
+       0.536
+      ]
+     }
+    },
+    "broad_cohort": {
+     "low": {
+      "n": 1118,
+      "players": 386,
+      "median_total_ret": 0.795,
+      "mean_total_ret": 0.819,
+      "returners": 1063,
+      "median_ppg_ret_returners": 0.87,
+      "survival": 0.671,
+      "severe_loss": 0.272,
+      "median_total_ret_ci": [
+       0.753,
+       0.826
+      ],
+      "survival_ci": [
+       0.638,
+       0.705
+      ]
+     },
+     "moderate": {
+      "n": 96,
+      "players": 66,
+      "median_total_ret": 0.635,
+      "mean_total_ret": 0.657,
+      "returners": 86,
+      "median_ppg_ret_returners": 0.783,
+      "survival": 0.625,
+      "severe_loss": 0.354,
+      "median_total_ret_ci": [
+       0.535,
+       0.711
+      ],
+      "survival_ci": [
+       0.516,
+       0.723
+      ]
+     },
+     "high": {
+      "n": 74,
+      "players": 40,
+      "median_total_ret": 0.462,
+      "mean_total_ret": 0.491,
+      "returners": 55,
+      "median_ppg_ret_returners": 0.796,
+      "survival": 0.446,
+      "severe_loss": 0.527,
+      "median_total_ret_ci": [
+       0.231,
+       0.629
+      ],
+      "survival_ci": [
+       0.333,
+       0.534
+      ]
+     }
+    }
+   },
+   "current_dev_band_counts": {
+    "low": 609,
+    "moderate": 58,
+    "high": 53
+   },
+   "current_meets_min_band_n": true,
+   "current_rank_among_valid_candidates": 7,
+   "valid_candidates": 19,
+   "top_candidates_dev": [
+    {
+     "decline": 27,
+     "cliff": 32,
+     "counts": {
+      "low": 444,
+      "moderate": 223,
+      "high": 53
+     },
+     "dev_brier_severe": 0.19386,
+     "dev_severe_by_band": {
+      "low": 0.223,
+      "moderate": 0.332,
+      "high": 0.472
+     }
+    },
+    {
+     "decline": 27,
+     "cliff": 30,
+     "counts": {
+      "low": 444,
+      "moderate": 165,
+      "high": 111
+     },
+     "dev_brier_severe": 0.19394,
+     "dev_severe_by_band": {
+      "low": 0.223,
+      "moderate": 0.315,
+      "high": 0.423
+     }
+    },
+    {
+     "decline": 27,
+     "cliff": 33,
+     "counts": {
+      "low": 444,
+      "moderate": 244,
+      "high": 32
+     },
+     "dev_brier_severe": 0.19402,
+     "dev_severe_by_band": {
+      "low": 0.223,
+      "moderate": 0.34,
+      "high": 0.5
+     }
+    },
+    {
+     "decline": 27,
+     "cliff": 31,
+     "counts": {
+      "low": 444,
+      "moderate": 198,
+      "high": 78
+     },
+     "dev_brier_severe": 0.19439,
+     "dev_severe_by_band": {
+      "low": 0.223,
+      "moderate": 0.333,
+      "high": 0.423
+     }
+    },
+    {
+     "decline": 27,
+     "cliff": 29,
+     "counts": {
+      "low": 444,
+      "moderate": 113,
+      "high": 163
+     },
+     "dev_brier_severe": 0.19476,
+     "dev_severe_by_band": {
+      "low": 0.223,
+      "moderate": 0.327,
+      "high": 0.38
+     }
+    }
+   ],
+   "best_dev_candidate": [
+    27,
+    32
+   ],
+   "best_candidate_bands": {
+    "all_2010_2024": {
+     "low": {
+      "n": 681,
+      "players": 285,
+      "median_total_ret": 0.835,
+      "mean_total_ret": 0.853,
+      "returners": 662,
+      "median_ppg_ret_returners": 0.898,
+      "survival": 0.68,
+      "severe_loss": 0.22,
+      "median_total_ret_ci": [
+       0.792,
+       0.876
+      ],
+      "survival_ci": [
+       0.637,
+       0.718
+      ]
+     },
+     "moderate": {
+      "n": 333,
+      "players": 143,
+      "median_total_ret": 0.696,
+      "mean_total_ret": 0.712,
+      "returners": 313,
+      "median_ppg_ret_returners": 0.816,
+      "survival": 0.619,
+      "severe_loss": 0.312,
+      "median_total_ret_ci": [
+       0.637,
+       0.75
+      ],
+      "survival_ci": [
+       0.554,
+       0.673
+      ]
+     },
+     "high": {
+      "n": 66,
+      "players": 35,
+      "median_total_ret": 0.532,
+      "mean_total_ret": 0.561,
+      "returners": 54,
+      "median_ppg_ret_returners": 0.755,
+      "survival": 0.485,
+      "severe_loss": 0.485,
+      "median_total_ret_ci": [
+       0.273,
+       0.694
+      ],
+      "survival_ci": [
+       0.34,
+       0.584
+      ]
+     }
+    },
+    "validation": {
+     "low": {
+      "n": 237,
+      "players": 121,
+      "median_total_ret": 0.86,
+      "mean_total_ret": 0.838,
+      "returners": 233,
+      "median_ppg_ret_returners": 0.891,
+      "survival": 0.692,
+      "severe_loss": 0.215,
+      "median_total_ret_ci": [
+       0.765,
+       0.9
+      ],
+      "survival_ci": [
+       0.62,
+       0.755
+      ]
+     },
+     "moderate": {
+      "n": 110,
+      "players": 56,
+      "median_total_ret": 0.647,
+      "mean_total_ret": 0.699,
+      "returners": 107,
+      "median_ppg_ret_returners": 0.772,
+      "survival": 0.609,
+      "severe_loss": 0.273,
+      "median_total_ret_ci": [
+       0.591,
+       0.755
+      ],
+      "survival_ci": [
+       0.5,
+       0.7
+      ]
+     },
+     "high": {
+      "n": 13,
+      "players": 8,
+      "median_total_ret": 0.471,
+      "mean_total_ret": 0.57,
+      "returners": 11,
+      "median_ppg_ret_returners": 0.824,
+      "survival": 0.462,
+      "severe_loss": 0.538,
+      "median_total_ret_ci": [
+       0.055,
+       0.824
+      ],
+      "survival_ci": [
+       0.273,
+       0.636
+      ]
+     }
+    },
+    "tight_cohort": {
+     "low": {
+      "n": 439,
+      "players": 192,
+      "median_total_ret": 0.848,
+      "mean_total_ret": 0.839,
+      "returners": 429,
+      "median_ppg_ret_returners": 0.918,
+      "survival": 0.67,
+      "severe_loss": 0.187,
+      "median_total_ret_ci": [
+       0.795,
+       0.883
+      ],
+      "survival_ci": [
+       0.619,
+       0.717
+      ]
+     },
+     "moderate": {
+      "n": 239,
+      "players": 104,
+      "median_total_ret": 0.75,
+      "mean_total_ret": 0.759,
+      "returners": 230,
+      "median_ppg_ret_returners": 0.863,
+      "survival": 0.59,
+      "severe_loss": 0.243,
+      "median_total_ret_ci": [
+       0.696,
+       0.817
+      ],
+      "survival_ci": [
+       0.53,
+       0.646
+      ]
+     },
+     "high": {
+      "n": 42,
+      "players": 25,
+      "median_total_ret": 0.614,
+      "mean_total_ret": 0.597,
+      "returners": 37,
+      "median_ppg_ret_returners": 0.796,
+      "survival": 0.405,
+      "severe_loss": 0.405,
+      "median_total_ret_ci": [
+       0.388,
+       0.731
+      ],
+      "survival_ci": [
+       0.219,
+       0.536
+      ]
+     }
+    },
+    "recent_2016_2024": {
+     "low": {
+      "n": 422,
+      "players": 185,
+      "median_total_ret": 0.86,
+      "mean_total_ret": 0.855,
+      "returners": 413,
+      "median_ppg_ret_returners": 0.897,
+      "survival": 0.694,
+      "severe_loss": 0.201,
+      "median_total_ret_ci": [
+       0.801,
+       0.889
+      ],
+      "survival_ci": [
+       0.642,
+       0.74
+      ]
+     },
+     "moderate": {
+      "n": 198,
+      "players": 95,
+      "median_total_ret": 0.64,
+      "mean_total_ret": 0.685,
+      "returners": 187,
+      "median_ppg_ret_returners": 0.801,
+      "survival": 0.596,
+      "severe_loss": 0.313,
+      "median_total_ret_ci": [
+       0.609,
+       0.73
+      ],
+      "survival_ci": [
+       0.514,
+       0.665
+      ]
+     },
+     "high": {
+      "n": 28,
+      "players": 16,
+      "median_total_ret": 0.586,
+      "mean_total_ret": 0.589,
+      "returners": 23,
+      "median_ppg_ret_returners": 0.84,
+      "survival": 0.464,
+      "severe_loss": 0.464,
+      "median_total_ret_ci": [
+       0.222,
+       0.761
+      ],
+      "survival_ci": [
+       0.286,
+       0.594
+      ]
+     }
+    }
+   },
+   "validation_brier": {
+    "severe": {
+     "no_age_model": 0.18563,
+     "current": 0.18389,
+     "candidate": 0.18203,
+     "current_minus_no_age_ci": [
+      -0.006,
+      0.002
+     ],
+     "candidate_minus_current_ci": [
+      -0.006,
+      0.002
+     ]
+    },
+    "survive": {
+     "no_age_model": 0.22512,
+     "current": 0.22354,
+     "candidate": 0.22236,
+     "current_minus_no_age_ci": [
+      -0.004,
+      0.001
+     ],
+     "candidate_minus_current_ci": [
+      -0.003,
+      0.001
+     ]
+    }
+   }
+  },
+  "TE": {
+   "current": [
+    30,
+    32
+   ],
+   "by_age_primary": {
+    "20": {
+     "n": 2,
+     "players": 2,
+     "median_total_ret": 0.948,
+     "mean_total_ret": 0.948,
+     "returners": 2,
+     "median_ppg_ret_returners": 1.099,
+     "survival": 1.0,
+     "severe_loss": 0.5,
+     "median_total_ret_ci": null,
+     "survival_ci": null
+    },
+    "21": {
+     "n": 11,
+     "players": 11,
+     "median_total_ret": 1.3,
+     "mean_total_ret": 1.272,
+     "returners": 11,
+     "median_ppg_ret_returners": 1.058,
+     "survival": 0.818,
+     "severe_loss": 0.0,
+     "median_total_ret_ci": [
+      0.697,
+      1.799
+     ],
+     "survival_ci": [
+      0.636,
+      1.0
+     ]
+    },
+    "22": {
+     "n": 36,
+     "players": 36,
+     "median_total_ret": 0.897,
+     "mean_total_ret": 0.82,
+     "returners": 32,
+     "median_ppg_ret_returners": 1.071,
+     "survival": 0.611,
+     "severe_loss": 0.389,
+     "median_total_ret_ci": [
+      0.451,
+      1.09
+     ],
+     "survival_ci": [
+      0.444,
+      0.75
+     ]
+    },
+    "23": {
+     "n": 47,
+     "players": 47,
+     "median_total_ret": 0.81,
+     "mean_total_ret": 0.92,
+     "returners": 44,
+     "median_ppg_ret_returners": 0.954,
+     "survival": 0.702,
+     "severe_loss": 0.191,
+     "median_total_ret_ci": [
+      0.717,
+      1.014
+     ],
+     "survival_ci": [
+      0.574,
+      0.83
+     ]
+    },
+    "24": {
+     "n": 59,
+     "players": 59,
+     "median_total_ret": 0.8,
+     "mean_total_ret": 0.884,
+     "returners": 58,
+     "median_ppg_ret_returners": 0.837,
+     "survival": 0.678,
+     "severe_loss": 0.288,
+     "median_total_ret_ci": [
+      0.587,
+      1.068
+     ],
+     "survival_ci": [
+      0.559,
+      0.797
+     ]
+    },
+    "25": {
+     "n": 66,
+     "players": 66,
+     "median_total_ret": 0.714,
+     "mean_total_ret": 0.803,
+     "returners": 64,
+     "median_ppg_ret_returners": 0.807,
+     "survival": 0.667,
+     "severe_loss": 0.273,
+     "median_total_ret_ci": [
+      0.629,
+      0.874
+     ],
+     "survival_ci": [
+      0.545,
+      0.773
+     ]
+    },
+    "26": {
+     "n": 66,
+     "players": 66,
+     "median_total_ret": 0.722,
+     "mean_total_ret": 0.816,
+     "returners": 63,
+     "median_ppg_ret_returners": 0.858,
+     "survival": 0.667,
+     "severe_loss": 0.288,
+     "median_total_ret_ci": [
+      0.692,
+      0.946
+     ],
+     "survival_ci": [
+      0.545,
+      0.788
+     ]
+    },
+    "27": {
+     "n": 54,
+     "players": 54,
+     "median_total_ret": 0.741,
+     "mean_total_ret": 0.763,
+     "returners": 54,
+     "median_ppg_ret_returners": 0.882,
+     "survival": 0.685,
+     "severe_loss": 0.352,
+     "median_total_ret_ci": [
+      0.515,
+      0.929
+     ],
+     "survival_ci": [
+      0.574,
+      0.796
+     ]
+    },
+    "28": {
+     "n": 56,
+     "players": 56,
+     "median_total_ret": 0.752,
+     "mean_total_ret": 0.768,
+     "returners": 53,
+     "median_ppg_ret_returners": 0.814,
+     "survival": 0.643,
+     "severe_loss": 0.321,
+     "median_total_ret_ci": [
+      0.558,
+      0.859
+     ],
+     "survival_ci": [
+      0.5,
+      0.768
+     ]
+    },
+    "29": {
+     "n": 42,
+     "players": 42,
+     "median_total_ret": 0.555,
+     "mean_total_ret": 0.68,
+     "returners": 38,
+     "median_ppg_ret_returners": 0.74,
+     "survival": 0.5,
+     "severe_loss": 0.429,
+     "median_total_ret_ci": [
+      0.385,
+      0.733
+     ],
+     "survival_ci": [
+      0.357,
+      0.643
+     ]
+    },
+    "30": {
+     "n": 31,
+     "players": 31,
+     "median_total_ret": 0.673,
+     "mean_total_ret": 0.645,
+     "returners": 25,
+     "median_ppg_ret_returners": 0.926,
+     "survival": 0.516,
+     "severe_loss": 0.419,
+     "median_total_ret_ci": [
+      0.421,
+      0.886
+     ],
+     "survival_ci": [
+      0.323,
+      0.677
+     ]
+    },
+    "31": {
+     "n": 21,
+     "players": 21,
+     "median_total_ret": 0.788,
+     "mean_total_ret": 0.715,
+     "returners": 18,
+     "median_ppg_ret_returners": 0.79,
+     "survival": 0.619,
+     "severe_loss": 0.381,
+     "median_total_ret_ci": [
+      0.475,
+      0.921
+     ],
+     "survival_ci": [
+      0.429,
+      0.81
+     ]
+    },
+    "32": {
+     "n": 14,
+     "players": 14,
+     "median_total_ret": 0.815,
+     "mean_total_ret": 0.668,
+     "returners": 9,
+     "median_ppg_ret_returners": 0.914,
+     "survival": 0.643,
+     "severe_loss": 0.357,
+     "median_total_ret_ci": [
+      0.0,
+      1.047
+     ],
+     "survival_ci": [
+      0.429,
+      0.857
+     ]
+    },
+    "33": {
+     "n": 13,
+     "players": 13,
+     "median_total_ret": 0.715,
+     "mean_total_ret": 0.733,
+     "returners": 13,
+     "median_ppg_ret_returners": 0.918,
+     "survival": 0.769,
+     "severe_loss": 0.231,
+     "median_total_ret_ci": [
+      0.63,
+      0.936
+     ],
+     "survival_ci": [
+      0.538,
+      1.0
+     ]
+    },
+    "34": {
+     "n": 11,
+     "players": 11,
+     "median_total_ret": 0.399,
+     "mean_total_ret": 0.475,
+     "returners": 8,
+     "median_ppg_ret_returners": 0.934,
+     "survival": 0.364,
+     "severe_loss": 0.636,
+     "median_total_ret_ci": [
+      0.0,
+      0.997
+     ],
+     "survival_ci": [
+      0.091,
+      0.636
+     ]
+    },
+    "35": {
+     "n": 3,
+     "players": 3,
+     "median_total_ret": 1.002,
+     "mean_total_ret": 0.703,
+     "returners": 2,
+     "median_ppg_ret_returners": 0.977,
+     "survival": 0.667,
+     "severe_loss": 0.333,
+     "median_total_ret_ci": null,
+     "survival_ci": null
+    },
+    "36": {
+     "n": 3,
+     "players": 3,
+     "median_total_ret": 0.651,
+     "mean_total_ret": 0.71,
+     "returners": 3,
+     "median_ppg_ret_returners": 0.802,
+     "survival": 1.0,
+     "severe_loss": 0.0,
+     "median_total_ret_ci": null,
+     "survival_ci": null
+    },
+    "37": {
+     "n": 4,
+     "players": 4,
+     "median_total_ret": 0.303,
+     "mean_total_ret": 0.389,
+     "returners": 3,
+     "median_ppg_ret_returners": 0.536,
+     "survival": 0.25,
+     "severe_loss": 0.75,
+     "median_total_ret_ci": null,
+     "survival_ci": null
+    },
+    "38": {
+     "n": 1,
+     "players": 1,
+     "median_total_ret": 0.0,
+     "mean_total_ret": 0.0,
+     "returners": 0,
+     "median_ppg_ret_returners": null,
+     "survival": 0.0,
+     "severe_loss": 1.0,
+     "median_total_ret_ci": null,
+     "survival_ci": null
+    }
+   },
+   "current_bands": {
+    "all_2010_2024": {
+     "low": {
+      "n": 439,
+      "players": 155,
+      "median_total_ret": 0.733,
+      "mean_total_ret": 0.821,
+      "returners": 419,
+      "median_ppg_ret_returners": 0.872,
+      "survival": 0.656,
+      "severe_loss": 0.303,
+      "median_total_ret_ci": [
+       0.698,
+       0.812
+      ],
+      "survival_ci": [
+       0.6,
+       0.706
+      ]
+     },
+     "moderate": {
+      "n": 52,
+      "players": 37,
+      "median_total_ret": 0.774,
+      "mean_total_ret": 0.673,
+      "returners": 43,
+      "median_ppg_ret_returners": 0.885,
+      "survival": 0.558,
+      "severe_loss": 0.404,
+      "median_total_ret_ci": [
+       0.475,
+       0.851
+      ],
+      "survival_ci": [
+       0.413,
+       0.685
+      ]
+     },
+     "high": {
+      "n": 49,
+      "players": 20,
+      "median_total_ret": 0.662,
+      "mean_total_ret": 0.61,
+      "returners": 38,
+      "median_ppg_ret_returners": 0.916,
+      "survival": 0.592,
+      "severe_loss": 0.408,
+      "median_total_ret_ci": [
+       0.371,
+       0.746
+      ],
+      "survival_ci": [
+       0.45,
+       0.694
+      ]
+     }
+    },
+    "recent_2016_2024": {
+     "low": {
+      "n": 267,
+      "players": 101,
+      "median_total_ret": 0.773,
+      "mean_total_ret": 0.828,
+      "returners": 255,
+      "median_ppg_ret_returners": 0.854,
+      "survival": 0.652,
+      "severe_loss": 0.307,
+      "median_total_ret_ci": [
+       0.684,
+       0.838
+      ],
+      "survival_ci": [
+       0.567,
+       0.721
+      ]
+     },
+     "moderate": {
+      "n": 24,
+      "players": 19,
+      "median_total_ret": 0.623,
+      "mean_total_ret": 0.613,
+      "returners": 19,
+      "median_ppg_ret_returners": 0.918,
+      "survival": 0.5,
+      "severe_loss": 0.458,
+      "median_total_ret_ci": [
+       0.211,
+       0.792
+      ],
+      "survival_ci": [
+       0.25,
+       0.704
+      ]
+     },
+     "high": {
+      "n": 33,
+      "players": 16,
+      "median_total_ret": 0.63,
+      "mean_total_ret": 0.557,
+      "returners": 27,
+      "median_ppg_ret_returners": 0.828,
+      "survival": 0.545,
+      "severe_loss": 0.455,
+      "median_total_ret_ci": [
+       0.369,
+       0.704
+      ],
+      "survival_ci": [
+       0.423,
+       0.667
+      ]
+     }
+    },
+    "development": {
+     "low": {
+      "n": 288,
+      "players": 117,
+      "median_total_ret": 0.73,
+      "mean_total_ret": 0.809,
+      "returners": 274,
+      "median_ppg_ret_returners": 0.886,
+      "survival": 0.639,
+      "severe_loss": 0.316,
+      "median_total_ret_ci": [
+       0.676,
+       0.835
+      ],
+      "survival_ci": [
+       0.573,
+       0.694
+      ]
+     },
+     "moderate": {
+      "n": 37,
+      "players": 25,
+      "median_total_ret": 0.788,
+      "mean_total_ret": 0.689,
+      "returners": 31,
+      "median_ppg_ret_returners": 0.863,
+      "survival": 0.568,
+      "severe_loss": 0.378,
+      "median_total_ret_ci": [
+       0.485,
+       0.912
+      ],
+      "survival_ci": [
+       0.394,
+       0.714
+      ]
+     },
+     "high": {
+      "n": 35,
+      "players": 14,
+      "median_total_ret": 0.706,
+      "mean_total_ret": 0.662,
+      "returners": 28,
+      "median_ppg_ret_returners": 0.934,
+      "survival": 0.629,
+      "severe_loss": 0.371,
+      "median_total_ret_ci": [
+       0.429,
+       0.941
+      ],
+      "survival_ci": [
+       0.471,
+       0.737
+      ]
+     }
+    },
+    "validation": {
+     "low": {
+      "n": 151,
+      "players": 65,
+      "median_total_ret": 0.737,
+      "mean_total_ret": 0.844,
+      "returners": 145,
+      "median_ppg_ret_returners": 0.858,
+      "survival": 0.689,
+      "severe_loss": 0.278,
+      "median_total_ret_ci": [
+       0.682,
+       0.874
+      ],
+      "survival_ci": [
+       0.591,
+       0.768
+      ]
+     },
+     "moderate": {
+      "n": 15,
+      "players": 12,
+      "median_total_ret": 0.641,
+      "mean_total_ret": 0.633,
+      "returners": 12,
+      "median_ppg_ret_returners": 0.982,
+      "survival": 0.533,
+      "severe_loss": 0.467,
+      "median_total_ret_ci": [
+       0.211,
+       0.833
+      ],
+      "survival_ci": [
+       0.25,
+       0.778
+      ]
+     },
+     "high": {
+      "n": 14,
+      "players": 9,
+      "median_total_ret": 0.531,
+      "mean_total_ret": 0.482,
+      "returners": 10,
+      "median_ppg_ret_returners": 0.848,
+      "survival": 0.5,
+      "severe_loss": 0.5,
+      "median_total_ret_ci": [
+       0.0,
+       0.715
+      ],
+      "survival_ci": [
+       0.182,
+       0.737
+      ]
+     }
+    },
+    "validation_excl_2020_to_2021": {
+     "low": {
+      "n": 122,
+      "players": 55,
+      "median_total_ret": 0.747,
+      "mean_total_ret": 0.861,
+      "returners": 119,
+      "median_ppg_ret_returners": 0.858,
+      "survival": 0.705,
+      "severe_loss": 0.238,
+      "median_total_ret_ci": [
+       0.692,
+       0.939
+      ],
+      "survival_ci": [
+       0.6,
+       0.8
+      ]
+     },
+     "moderate": {
+      "n": 11,
+      "players": 10,
+      "median_total_ret": 0.431,
+      "mean_total_ret": 0.613,
+      "returners": 9,
+      "median_ppg_ret_returners": 0.918,
+      "survival": 0.455,
+      "severe_loss": 0.545,
+      "median_total_ret_ci": [
+       0.211,
+       1.18
+      ],
+      "survival_ci": [
+       0.182,
+       0.727
+      ]
+     },
+     "high": {
+      "n": 11,
+      "players": 7,
+      "median_total_ret": 0.662,
+      "mean_total_ret": 0.48,
+      "returners": 7,
+      "median_ppg_ret_returners": 0.899,
+      "survival": 0.545,
+      "severe_loss": 0.455,
+      "median_total_ret_ci": [
+       0.0,
+       0.715
+      ],
+      "survival_ci": [
+       0.143,
+       0.8
+      ]
+     }
+    },
+    "tight_cohort": {
+     "low": {
+      "n": 287,
+      "players": 105,
+      "median_total_ret": 0.772,
+      "mean_total_ret": 0.818,
+      "returners": 278,
+      "median_ppg_ret_returners": 0.896,
+      "survival": 0.613,
+      "severe_loss": 0.247,
+      "median_total_ret_ci": [
+       0.701,
+       0.838
+      ],
+      "survival_ci": [
+       0.549,
+       0.671
+      ]
+     },
+     "moderate": {
+      "n": 33,
+      "players": 22,
+      "median_total_ret": 0.788,
+      "mean_total_ret": 0.73,
+      "returners": 29,
+      "median_ppg_ret_returners": 0.869,
+      "survival": 0.667,
+      "severe_loss": 0.303,
+      "median_total_ret_ci": [
+       0.641,
+       0.869
+      ],
+      "survival_ci": [
+       0.484,
+       0.816
+      ]
+     },
+     "high": {
+      "n": 40,
+      "players": 17,
+      "median_total_ret": 0.704,
+      "mean_total_ret": 0.655,
+      "returners": 32,
+      "median_ppg_ret_returners": 0.909,
+      "survival": 0.575,
+      "severe_loss": 0.35,
+      "median_total_ret_ci": [
+       0.429,
+       0.884
+      ],
+      "survival_ci": [
+       0.429,
+       0.679
+      ]
+     }
+    },
+    "broad_cohort": {
+     "low": {
+      "n": 349,
+      "players": 123,
+      "median_total_ret": 0.741,
+      "mean_total_ret": 0.832,
+      "returners": 337,
+      "median_ppg_ret_returners": 0.858,
+      "survival": 0.662,
+      "severe_loss": 0.272,
+      "median_total_ret_ci": [
+       0.695,
+       0.833
+      ],
+      "survival_ci": [
+       0.595,
+       0.721
+      ]
+     },
+     "moderate": {
+      "n": 45,
+      "players": 30,
+      "median_total_ret": 0.736,
+      "mean_total_ret": 0.638,
+      "returners": 37,
+      "median_ppg_ret_returners": 0.869,
+      "survival": 0.6,
+      "severe_loss": 0.422,
+      "median_total_ret_ci": [
+       0.421,
+       0.792
+      ],
+      "survival_ci": [
+       0.436,
+       0.729
+      ]
+     },
+     "high": {
+      "n": 45,
+      "players": 19,
+      "median_total_ret": 0.702,
+      "mean_total_ret": 0.634,
+      "returners": 35,
+      "median_ppg_ret_returners": 0.914,
+      "survival": 0.578,
+      "severe_loss": 0.378,
+      "median_total_ret_ci": [
+       0.429,
+       0.85
+      ],
+      "survival_ci": [
+       0.452,
+       0.681
+      ]
+     }
+    }
+   },
+   "current_dev_band_counts": {
+    "low": 288,
+    "moderate": 37,
+    "high": 35
+   },
+   "current_meets_min_band_n": true,
+   "current_rank_among_valid_candidates": null,
+   "valid_candidates": 13,
+   "top_candidates_dev": [
+    {
+     "decline": 29,
+     "cliff": 33,
+     "counts": {
+      "low": 260,
+      "moderate": 74,
+      "high": 26
+     },
+     "dev_brier_severe": 0.21874,
+     "dev_severe_by_band": {
+      "low": 0.304,
+      "moderate": 0.378,
+      "high": 0.423
+     }
+    },
+    {
+     "decline": 27,
+     "cliff": 29,
+     "counts": {
+      "low": 190,
+      "moderate": 70,
+      "high": 100
+     },
+     "dev_brier_severe": 0.21882,
+     "dev_severe_by_band": {
+      "low": 0.3,
+      "moderate": 0.314,
+      "high": 0.39
+     }
+    },
+    {
+     "decline": 27,
+     "cliff": 33,
+     "counts": {
+      "low": 190,
+      "moderate": 144,
+      "high": 26
+     },
+     "dev_brier_severe": 0.21913,
+     "dev_severe_by_band": {
+      "low": 0.3,
+      "moderate": 0.347,
+      "high": 0.423
+     }
+    },
+    {
+     "decline": 27,
+     "cliff": 30,
+     "counts": {
+      "low": 190,
+      "moderate": 98,
+      "high": 72
+     },
+     "dev_brier_severe": 0.21939,
+     "dev_severe_by_band": {
+      "low": 0.3,
+      "moderate": 0.347,
+      "high": 0.375
+     }
+    },
+    {
+     "decline": 27,
+     "cliff": 31,
+     "counts": {
+      "low": 190,
+      "moderate": 120,
+      "high": 50
+     },
+     "dev_brier_severe": 0.21939,
+     "dev_severe_by_band": {
+      "low": 0.3,
+      "moderate": 0.35,
+      "high": 0.38
+     }
+    }
+   ],
+   "best_dev_candidate": [
+    29,
+    33
+   ],
+   "best_candidate_bands": {
+    "all_2010_2024": {
+     "low": {
+      "n": 397,
+      "players": 149,
+      "median_total_ret": 0.772,
+      "mean_total_ret": 0.836,
+      "returners": 381,
+      "median_ppg_ret_returners": 0.891,
+      "survival": 0.673,
+      "severe_loss": 0.29,
+      "median_total_ret_ci": [
+       0.706,
+       0.837
+      ],
+      "survival_ci": [
+       0.609,
+       0.732
+      ]
+     },
+     "moderate": {
+      "n": 108,
+      "players": 58,
+      "median_total_ret": 0.663,
+      "mean_total_ret": 0.675,
+      "returners": 90,
+      "median_ppg_ret_returners": 0.863,
+      "survival": 0.546,
+      "severe_loss": 0.407,
+      "median_total_ret_ci": [
+       0.476,
+       0.788
+      ],
+      "survival_ci": [
+       0.415,
+       0.653
+      ]
+     },
+     "high": {
+      "n": 35,
+      "players": 15,
+      "median_total_ret": 0.642,
+      "mean_total_ret": 0.587,
+      "returners": 29,
+      "median_ppg_ret_returners": 0.918,
+      "survival": 0.571,
+      "severe_loss": 0.429,
+      "median_total_ret_ci": [
+       0.371,
+       0.745
+      ],
+      "survival_ci": [
+       0.433,
+       0.682
+      ]
+     }
+    },
+    "validation": {
+     "low": {
+      "n": 137,
+      "players": 62,
+      "median_total_ret": 0.758,
+      "mean_total_ret": 0.844,
+      "returners": 132,
+      "median_ppg_ret_returners": 0.872,
+      "survival": 0.701,
+      "severe_loss": 0.263,
+      "median_total_ret_ci": [
+       0.673,
+       0.871
+      ],
+      "survival_ci": [
+       0.597,
+       0.781
+      ]
+     },
+     "moderate": {
+      "n": 34,
+      "players": 21,
+      "median_total_ret": 0.604,
+      "mean_total_ret": 0.673,
+      "returners": 27,
+      "median_ppg_ret_returners": 0.885,
+      "survival": 0.529,
+      "severe_loss": 0.471,
+      "median_total_ret_ci": [
+       0.292,
+       0.784
+      ],
+      "survival_ci": [
+       0.345,
+       0.692
+      ]
+     },
+     "high": {
+      "n": 9,
+      "players": 6,
+      "median_total_ret": 0.702,
+      "mean_total_ret": 0.576,
+      "returners": 8,
+      "median_ppg_ret_returners": 0.857,
+      "survival": 0.556,
+      "severe_loss": 0.444,
+      "median_total_ret_ci": [
+       0.232,
+       0.85
+      ],
+      "survival_ci": [
+       0.25,
+       0.818
+      ]
+     }
+    },
+    "tight_cohort": {
+     "low": {
+      "n": 261,
+      "players": 99,
+      "median_total_ret": 0.781,
+      "mean_total_ret": 0.837,
+      "returners": 254,
+      "median_ppg_ret_returners": 0.901,
+      "survival": 0.636,
+      "severe_loss": 0.23,
+      "median_total_ret_ci": [
+       0.719,
+       0.847
+      ],
+      "survival_ci": [
+       0.573,
+       0.694
+      ]
+     },
+     "moderate": {
+      "n": 71,
+      "players": 37,
+      "median_total_ret": 0.733,
+      "mean_total_ret": 0.679,
+      "returners": 61,
+      "median_ppg_ret_returners": 0.869,
+      "survival": 0.563,
+      "severe_loss": 0.352,
+      "median_total_ret_ci": [
+       0.507,
+       0.792
+      ],
+      "survival_ci": [
+       0.41,
+       0.692
+      ]
+     },
+     "high": {
+      "n": 28,
+      "players": 13,
+      "median_total_ret": 0.677,
+      "mean_total_ret": 0.654,
+      "returners": 24,
+      "median_ppg_ret_returners": 0.9,
+      "survival": 0.536,
+      "severe_loss": 0.357,
+      "median_total_ret_ci": [
+       0.414,
+       0.893
+      ],
+      "survival_ci": [
+       0.364,
+       0.667
+      ]
+     }
+    },
+    "recent_2016_2024": {
+     "low": {
+      "n": 240,
+      "players": 97,
+      "median_total_ret": 0.788,
+      "mean_total_ret": 0.843,
+      "returners": 231,
+      "median_ppg_ret_returners": 0.863,
+      "survival": 0.679,
+      "severe_loss": 0.287,
+      "median_total_ret_ci": [
+       0.722,
+       0.847
+      ],
+      "survival_ci": [
+       0.601,
+       0.744
+      ]
+     },
+     "moderate": {
+      "n": 60,
+      "players": 38,
+      "median_total_ret": 0.594,
+      "mean_total_ret": 0.653,
+      "returners": 49,
+      "median_ppg_ret_returners": 0.821,
+      "survival": 0.483,
+      "severe_loss": 0.45,
+      "median_total_ret_ci": [
+       0.331,
+       0.765
+      ],
+      "survival_ci": [
+       0.308,
+       0.632
+      ]
+     },
+     "high": {
+      "n": 24,
+      "players": 13,
+      "median_total_ret": 0.481,
+      "mean_total_ret": 0.527,
+      "returners": 21,
+      "median_ppg_ret_returners": 0.802,
+      "survival": 0.5,
+      "severe_loss": 0.5,
+      "median_total_ret_ci": [
+       0.368,
+       0.702
+      ],
+      "survival_ci": [
+       0.36,
+       0.633
+      ]
+     }
+    }
+   },
+   "validation_brier": {
+    "severe": {
+     "no_age_model": 0.2146,
+     "current": 0.21175,
+     "candidate": 0.20976,
+     "current_minus_no_age_ci": [
+      -0.006,
+      0.001
+     ],
+     "candidate_minus_current_ci": [
+      -0.005,
+      0.001
+     ]
+    },
+    "survive": {
+     "no_age_model": 0.22498,
+     "current": 0.22349,
+     "candidate": 0.22056,
+     "current_minus_no_age_ci": [
+      -0.004,
+      0.002
+     ],
+     "candidate_minus_current_ci": [
+      -0.008,
+      0.002
+     ]
+    }
+   }
+  }
+ },
+ "penalty_sensitivity": {
+  "hybrid_pct_per_composite_point": 0.25,
+  "note": "hybrid multiplier = 1 + (composite - percentile)/100 * MAX_BLEND_ADJUSTMENT; a penalty of k composite points moves hybrid by k * 0.25 % (all else equal, before the 0..100 composite clamp).",
+  "moderate": {
+   "-3": -0.75,
+   "-5": -1.25,
+   "-8": -2.0
+  },
+  "high": {
+   "-8": -2.0,
+   "-12": -3.0,
+   "-16": -4.0
+  }
+ },
+ "live_impact": {
+  "skipped": "run with --live (needs api.sleeper.app and api.fantasycalc.com)"
+ }
+}
