@@ -223,8 +223,9 @@ precise one-year cliffs.
 
 This needs today's Sleeper ages and FantasyCalc values. The research sandbox's
 network policy blocks `api.sleeper.app` and `api.fantasycalc.com`: `--live`
-fails with `URLError: Tunnel connection failed: 403 Forbidden`, and the failure
-is recorded in the results file rather than filled in.
+fails with `URLError: Tunnel connection failed: 403 Forbidden` (the script
+records that error under `live_impact` rather than filling it in). The committed
+results come from the default run, so they show `live_impact` as skipped.
 
 The analysis is implemented in the script (`--live`) and is ready to run from
 any machine with access. It uses free endpoints and makes no model calls.
