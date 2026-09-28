@@ -528,3 +528,85 @@ Deferred items D1–D5 follow at leisure.
 After writing this document, both repos' offline suites were re-run
 unchanged: Ddreportcards 160 tests OK, scoutcap 79 tests OK. No runtime file,
 requirement or test was modified in either repo.
+
+---
+
+## Review amendments (accepted with the audit)
+
+1. **Settings scope narrowed.** For B1 the package owns a *FantasyCalc
+   query profile* (`is_dynasty`, `num_qbs`, `num_teams`, `ppr`), e.g. in
+   `dynasty_core/settings.py`. It does **not** own league identity: league
+   id, owner/display name, draft year and roster identity stay app-owned.
+   This supersedes the broader wording in §12 Q4/Q5.
+2. **`requires-python = ">=3.12"`**, not `>=3.11`. Both consumers are
+   deliberately on 3.12, and there's no reason to widen the support
+   contract during extraction. This supersedes the §7 observation and
+   the 2C-7 note.
+3. **No committed red tests.** 2C-1 adds only passing tests and runs the B1
+   isolation probe out of band. The permanent import-isolation regression
+   test lands in 2C-2 alongside the fix, green immediately.
+
+---
+
+## 2C-1 completion — package behavioral test baseline
+
+**Tests only.** No `dynasty_core/*.py` implementation file, config,
+requirement, or other runtime file changed in either repo. All four
+implementation SHAs are identical to §1.
+
+### Tests added (byte-identical in both repos)
+
+| File | Tests | Covers | SHA-256 |
+|---|---|---|---|
+| `tests/test_dynasty_core_fantasycalc.py` | 18 | request contract (URL, `isDynasty`/`numQbs`/`numTeams`/`ppr`, timeout 20, `raise_for_status`, passthrough); parameter-keyed cache (SF vs 1QB never share an entry; same key inside TTL = no refetch; expired = refetch; failed refresh keeps the previous good entry); condensed-index invalidation (reused while default values unchanged; dropped when the default parameter set refreshes; untouched when a non-default set refreshes); `index_by_sleeper_id`, `index_by_sleeper_id_with_redraft_rank`, `index_picks_by_label`, `get_value_for_sleeper_id`, `get_player_value`, `value_grade`, `GRADE_TIERS` | `d08ed06f36e534b20403a54bf7109066db75230ee7fc65336c86b02f566ef787` |
+| `tests/test_dynasty_core_espn.py` | 16 | `team_espn_id` (normal, `WAS`→`WSH`, unknown→`None`, 32-team map); `flatten_statistics` exact `name→value` contract and its difference from Scout's college transform; season/career stat URLs, timeout, 400/404→`{}`, other errors raise; `get_player_injury_notes` athlete filtering (incl. id-prefix collision), dereference-only-matches, feed pagination, empty result, feed error; `fantasy_relevant_stats` | `ca64d9ebe4c6361f2880bb19e5a879478ff7ae47b003448947141b4a910fb1c3` |
+| `tests/test_dynasty_core_sleeper_league_primitives.py` | 7 | URL/timeout/passthrough/non-2xx for `get_league_users`, `get_league_rosters`, `get_league_info`, `get_traded_picks`, `get_league_drafts`, `get_transactions`; `get_league_season_chain` (newest-first walk, empty-string stop, cycle guard); `get_all_trades` (weeks 1–18, completed trades only, dedupe by `transaction_id`) | `d21df9c9380501c9cba66db22e4867ab415d05c91db19a4c2cad40b5170079de` |
+
+Deliberately **not** tested: `get_all_trades_all_seasons`,
+`get_roster_by_display_name`, `resolve_roster_players` (they leave the
+package in 2C-3, F1).
+
+Totals: Ddreportcards 160 → **201**, scoutcap 79 → **120**, all green.
+Shared `dynasty_core` behavioral tests now number 72 (31 existing + 41 new),
+in 7 byte-identical files per repo.
+
+### B1 fail-first probe (run out of band, not committed)
+
+A copy of the unchanged package (`fantasycalc.py` SHA `b3f92084…`) was
+imported from isolated directories:
+
+| Scenario | Result |
+|---|---|
+| A. no `config` package | imported; `ppr=0.5 num_qbs=2 num_teams=12` (hardcoded fallback) |
+| B. unrelated `config` package | imported; `ppr=0.5 num_qbs=2 num_teams=12` (hardcoded fallback) |
+| C. hostile `config.dynasty_config` (1QB, 10 teams, 1.0 PPR) | imported; `ppr=1.0 num_qbs=1 num_teams=10` — **defaults silently changed** |
+| D. malformed `config.dynasty_config` (no `ppr`) | **`KeyError: 'ppr'` — import fails** |
+
+This matches §2.2 exactly. The B1 decision is unchanged. The permanent
+isolation regression test is intentionally deferred to 2C-2, so that every
+committed checkpoint stays green.
+
+### New observations while specifying FantasyCalc (not acted on, not encoded as contract)
+
+- **O1 — the condensed index never checks the TTL.**
+  - What happens: `_build_condensed_index()` returns `_index_cache` as soon
+    as it is set, without calling `get_dynasty_values()`. So
+    `get_player_value()` keeps serving the first-built index until something
+    else refetches the *default* parameter set.
+  - Who is affected: Scout reads FantasyCalc only through
+    `get_player_value`/`value_grade` and never calls `get_dynasty_values()`
+    itself. So in a long-lived Scout process (Streamlit, MCP server),
+    FantasyCalc values never refresh after first load. Ddreportcards doesn't
+    call `get_player_value`, so it's unaffected.
+  - Recommendation: triage alongside 2C-2. It's a correctness fix in
+    `fantasycalc.py`, separate from B1.
+- **O2 — the redraft-rank index writes into the caller's list.**
+  `index_by_sleeper_id_with_redraft_rank()` writes `redraftPositionRank`
+  into the entry dicts it's given. When the caller passes the cached
+  `get_dynasty_values()` list, as Ddreportcards' situation agent does, that
+  mutates the shared cache. It's harmless today because every caller
+  derives the same field the same way. It's worth knowing before the
+  package gains other consumers.
+
+Neither behavior is asserted by the new tests, so fixing either later won't
+fight the baseline.
