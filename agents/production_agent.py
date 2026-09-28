@@ -3,11 +3,14 @@ Production Agent — evaluates production/talent only, independent of situation,
 for a ROSTERED dynasty player. Adapted from Scout's rookie production_agent:
 college stats are swapped for the most recently completed NFL regular season
 (the historical production baseline) + the prior completed season via ESPN's
-Core API -- never partial in-progress totals. The Risk Modifier combines a
-current-health/availability score (1-5, from Sleeper's live injury/practice
-status + ESPN's team injury feed) with a
+Core API -- never partial in-progress totals. production_score/production_grade
+measure that demonstrated production only. The Risk Modifier is reported
+alongside it, not folded into it: a current-health/availability score (1-5,
+from Sleeper's live injury/practice status + ESPN's team injury feed) and a
 separately-computed age-curve signal (years_exp/age from Sleeper), since a
-rostered veteran's dynasty risk includes "how much window is left." There is
+rostered veteran's dynasty risk includes "how much window is left." Those two
+signals are applied numerically once, downstream, by the Market agent's
+proprietary composite -- never inside production_score. There is
 no predictive model behind a numeric injury probability, and current
 injury/status evidence does not establish a historical durability record, so
 neither is claimed.
@@ -170,8 +173,9 @@ def get_injury_notes(espn_athlete_id: str, team: str) -> dict:
 
 def compute_age_curve_signal(position: str, age: int | None, years_exp: int | None) -> dict:
     """
-    Estimate dynasty career-window remaining from position-specific aging curves.
-    Purely age/experience-based risk context — not a talent judgment.
+    Classify aging risk against this model's configured position aging thresholds
+    (AGE_CURVES). Purely age/experience-based risk context — not a talent
+    judgment. The thresholds are configured values, not cited research.
     position: 'QB', 'RB', 'WR', or 'TE'
     """
     if age is None:
@@ -179,13 +183,14 @@ def compute_age_curve_signal(position: str, age: int | None, years_exp: int | No
     c = AGE_CURVES.get(position, {"decline_age": 29, "cliff_age": 31})
     if age < c["decline_age"]:
         risk = "low"
-        note = f"{c['decline_age'] - age}+ years before the typical {position} decline age"
+        note = (f"{c['decline_age'] - age}+ years before this model's configured {position} "
+                f"aging-risk threshold ({c['decline_age']})")
     elif age < c["cliff_age"]:
         risk = "moderate"
-        note = f"entering the typical {position} decline window ({c['decline_age']}-{c['cliff_age']})"
+        note = f"within this model's configured {position} moderate aging-risk window ({c['decline_age']}-{c['cliff_age']})"
     else:
         risk = "high"
-        note = f"past the typical {position} cliff age ({c['cliff_age']}) — short window remaining"
+        note = f"at or past this model's configured {position} high aging-risk threshold ({c['cliff_age']})"
     return {
         "position": position,
         "age": age,
@@ -198,13 +203,16 @@ def compute_age_curve_signal(position: str, age: int | None, years_exp: int | No
 # ── Calibration anchors ───────────────────────────────────────────────────────
 
 PRODUCTION_CALIBRATION = """
-Production Grade calibration anchors (0-100) — evaluate on-field NFL production
-efficiency and volume ONLY, ignore landing spot/opportunity (that's a separate agent):
+Production Grade calibration anchors (0-100) — evaluate demonstrated on-field NFL
+production efficiency and volume ONLY, ignore landing spot/opportunity (that's a separate
+agent). Age and current health do not move this grade: they are scored separately in
+risk_modifier below. Games actually missed in the graded seasons still count as they show
+up in the production record (volume, sample size) — that is evidence, not a risk estimate:
 - 95-100 (A+): Historically elite season production, top-3 at position, workhorse volume
 - 85-94  (A/A-): Clear top-12 producer at position, strong efficiency and volume both
 - 75-84  (B+/B): Solid top-24 producer, above-average efficiency or volume
 - 65-74  (B-/C+): Usable committee/complementary producer, decent efficiency, capped volume
-- 50-64  (C/C-): Replacement-level production, inconsistent, or limited sample (injury/role)
+- 50-64  (C/C-): Replacement-level production, inconsistent, or limited sample (games played/role)
 - 35-49  (D+/D): Thin production even accounting for role, concerning efficiency
 - 0-34   (D-/F): Minimal production evidence, buried or non-functional as a producer
 
@@ -230,11 +238,15 @@ past injuries. Do not output a numeric injury probability of any kind.
 - 1: Currently unavailable / severe present concern -- out with a
   serious/structural injury per current status
 
-Aging Risk is a SEPARATE signal, computed by compute_age_curve_signal from
-position-specific age curves. It does not change the meaning of the Current
-Health Score above -- a young, currently-healthy player and an old,
-currently-healthy player can both score 5 on health while differing on
-aging_risk.
+Aging Risk is a SEPARATE signal, computed by compute_age_curve_signal against
+this model's configured position aging thresholds. It does not change the
+meaning of the Current Health Score above -- a young, currently-healthy player
+and an old, currently-healthy player can both score 5 on health while
+differing on aging_risk.
+
+Neither Current Health Score nor Aging Risk changes production_score or
+production_grade. Both go in risk_modifier; the Market agent applies them to
+dynasty value once, deterministically.
 """
 
 SYSTEM_PROMPT = f"""You are the Production Agent for a dynasty fantasy football roster report card tool.
@@ -242,9 +254,15 @@ SYSTEM_PROMPT = f"""You are the Production Agent for a dynasty fantasy football 
 Your job: evaluate a ROSTERED player's on-field PRODUCTION only — completely independent
 of their situation/opportunity (a separate agent handles that). Focus on: NFL production
 volume and efficiency (most recently completed regular season as the historical baseline,
-with prior-completed-season trend context — never partial in-progress totals),
-positional value, current health/availability (Current Health Score), and aging risk
-(career-window signal) — two separate components of the Risk Modifier.
+with prior-completed-season trend context — never partial in-progress totals) and positional
+value of that production.
+
+Separately, report the Risk Modifier: current health/availability (Current Health Score)
+and aging risk (career-window signal). production_score and production_grade measure
+demonstrated on-field production only. current_health_score and aging_risk are reported
+separately in risk_modifier and are applied to dynasty value downstream by the Market agent.
+Do not lower or raise production_score because of age or current health — an older or
+currently injured player with the same production record gets the same production_score.
 
 {PRODUCTION_CALIBRATION}
 
@@ -266,7 +284,8 @@ Steps:
 6. Score Current Health Score from current Sleeper status + current ESPN injury notes only,
    per the calibration above. Never output a numeric injury probability. Aging Risk comes
    straight from compute_age_curve_signal and stays a separate field.
-7. Synthesize all into a Production Grade
+7. Grade production_score/production_grade from the production evidence in steps 2-3 only;
+   put current health and aging in risk_modifier (and concerns), not in the grade
 
 CRITICAL — lookup_player_info's espn_id can be null for a player too deep on the roster to
 have an ESPN athlete id on file (neither Sleeper nor FantasyCalc tracks one). When that
