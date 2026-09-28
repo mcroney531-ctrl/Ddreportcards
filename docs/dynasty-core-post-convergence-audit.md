@@ -423,7 +423,7 @@ correct.
 
 | # | Item | Evidence | Affected | Recommended action | Why here (not deferred) |
 |---|---|---|---|---|---|
-| F1 | Ddreportcards-only workflows inside the shared namespace | §5: `get_all_trades_all_seasons`, `get_roster_by_display_name`, `resolve_roster_players` are called only by DD and encode DD identity/annotation policy | `dynasty_core/sleeper.py`; DD `data/sleeper_client.py`, `api.py`, `app.py`, `data/trade_history.py` | Move them into a Ddreportcards-owned module. Re-point DD's facade and `api.py`'s direct import; callers otherwise unchanged. Keep `get_league_season_chain`. | Whatever ships in v1 becomes the versioned contract. Removing them later is a breaking package release; removing them now is a local DD refactor. |
+| F1 | **RESOLVED in 2C-3.** Ddreportcards-only workflows inside the shared namespace | §5: `get_all_trades_all_seasons`, `get_roster_by_display_name`, `resolve_roster_players` are called only by DD and encode DD identity/annotation policy | `dynasty_core/sleeper.py`; DD `data/sleeper_client.py`, `api.py`, `app.py`, `data/trade_history.py` | Move them into a Ddreportcards-owned module. Re-point DD's facade and `api.py`'s direct import; callers otherwise unchanged. Keep `get_league_season_chain`. | Whatever ships in v1 becomes the versioned contract. Removing them later is a breaking package release; removing them now is a local DD refactor. |
 | F2 | Package-level tests missing for FantasyCalc and ESPN | §9.1 | new package test suite | Write the FantasyCalc and ESPN provider-contract and cache tests (and the Sleeper primitive URL tests) **before** extraction, run them against the current copies, then move them with the package. | Extraction must not be the first time the package's behavior is specified. The FantasyCalc cache has a documented history of silent wrong answers. |
 | F3 | Ddreportcards pin contract can't express a Git dependency | §7: `test_requirements_are_pinned.py` and `check_dependency_versions.py` accept only `==` pins and exactly 8 names | DD `tests/test_requirements_are_pinned.py`, `scripts/check_dependency_versions.py` | Extend both, deliberately, to accept one additional form: `dynasty-core @ git+https://…@<40-hex SHA>`. Reject branch names and tags. | Otherwise the first packaging commit either fails CI or quietly weakens the Phase 4B guarantee. |
 | F4 | Scout requirements unpinned | §7 | scoutcap `requirements.txt` | Pin the direct dependencies to known-good versions (the same method as DD's Phase 4B). | The release gate (§9.3 step 3) is not reproducible without it. |
@@ -734,3 +734,80 @@ Command's JSON mirror is out of scope.
 
 Totals: Ddreportcards 206 → **214**, scoutcap 125 → **133**, all green. O2
 untouched.
+
+---
+
+## 2C-3 completion — Ddreportcards workflows out of the package (F1)
+
+**F1 — resolved.** Pre-edit caller audit matched expectations exactly:
+
+| Workflow | Ddreportcards callers | Scout callers |
+|---|---|---|
+| `get_all_trades_all_seasons` | `data/trade_history.py` via `data/sleeper_client.py` | none |
+| `get_roster_by_display_name` | `app.py` via `sleeper_client`; `api.py` direct from `dynasty_core.sleeper` (3 call sites) | none |
+| `resolve_roster_players` | `app.py` via `sleeper_client`; `api.py` direct (2 call sites) | none |
+
+**The move.** The three functions were moved verbatim, with the same names,
+signatures, error messages, annotation keys and sort, into the new
+`Ddreportcards/data/sleeper_workflows.py`. That module composes only shared
+primitives through `import dynasty_core.sleeper as sleeper_core` and
+contains no `httpx` and no Sleeper URL. They were deleted from both
+package copies of `dynasty_core/sleeper.py` (a pure 34-line deletion). All
+provider primitives stay, including `get_league_season_chain`,
+`get_transactions`, `get_all_trades` and `get_all_players`.
+
+**Compatibility.**
+- `data/sleeper_client.py` still exposes the same public names. Provider
+  primitives come from `dynasty_core.sleeper`, the three workflows from
+  `data.sleeper_workflows`, and its docstring now says so.
+- `api.py` imports `get_roster_by_display_name` / `resolve_roster_players`
+  explicitly from `data.sleeper_workflows`. Its genuine provider imports still
+  point at `dynasty_core`.
+- No call site in `app.py`, `api.py` or `data/trade_history.py` changed.
+
+**Tests** (`tests/test_sleeper_workflows.py`, 19, Ddreportcards-only, not
+copied to scoutcap):
+- Behavior of each moved workflow (season walk, per-season fetch,
+  `_season`/`_league_id`, combined result, newest-first sort with falsy
+  `created` treated as 0 in stable order; exact display-name match, both
+  `ValueError` messages; metadata attach, unknown id keeps `player_id`,
+  missing or empty `players` gives `[]`).
+- Boundary: the names are gone from `dynasty_core.sleeper`, defined in
+  `data.sleeper_workflows`, re-exported by `sleeper_client`, and imported
+  from there by `api`; primitives stay in the package; no HTTP in the
+  workflows module.
+- End to end, with a URL-routed network fake: `api.roster_data` (including
+  unknown owner → 404 with the same detail), `sleeper_client` workflow
+  access, and `trade_history.get_trade_history` across two seasons.
+  `_league_id` still selects each season's team names.
+
+Against the pre-2C-3 tree, 15 of 19 fail (all boundary and behavior tests).
+The 4 end-to-end tests and the primitives-stay check pass before and after,
+by design: they prove behavior didn't change.
+
+The shared package suite was **not** changed to keep these as package
+contracts. Stage 2C-1's league-primitives test already excluded them.
+
+**Final boundary:**
+
+| Location | Owns |
+|---|---|
+| `dynasty_core.sleeper` | Sleeper provider/domain primitives only |
+| `Ddreportcards/data/sleeper_workflows.py` | DD-specific cross-season / owner-resolution / roster-enrichment composition |
+| `Ddreportcards/data/sleeper_client.py` | compatibility surface combining the two for existing DD callers |
+
+**Observation (preserved, not changed).** `resolve_roster_players` uses
+`roster.get("players", [])`. A missing key gives `[]`, but an explicit
+`"players": null` would raise `TypeError`. Behavior was moved exactly as it
+was. It's a candidate for a later DD-side hardening, outside package scope.
+
+Verification:
+- Ddreportcards 214 → **233**, scoutcap **133** (unchanged count), all green.
+- `data.sleeper_workflows`, `data.sleeper_client` and `api` import.
+- Streamlit `AppTest` of Ddreportcards `app.py` (fake Sleeper/FantasyCalc)
+  raises no exceptions; its roster load resolves through the moved
+  workflow.
+- All five package files and all eight shared test files are byte-identical
+  across repos (`sleeper.py` now `47b35ba1…`).
+
+O2 untouched; F5 and packaging not started.

@@ -87,9 +87,11 @@ from dynasty_core.sleeper import (
     get_all_players,
     get_league_users,
     get_league_rosters,
+    get_trending_adds,
+)
+from data.sleeper_workflows import (
     get_roster_by_display_name,
     resolve_roster_players,
-    get_trending_adds,
 )
 from dynasty_core.fantasycalc import (
     get_dynasty_values,
