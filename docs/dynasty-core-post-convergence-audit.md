@@ -444,7 +444,7 @@ correct.
 | # | Item | Evidence | Affected | Recommended action | Why here |
 |---|---|---|---|---|---|
 | R1 | **RESOLVED in 2C-2.** Scout `config/dynasty_config.py` | §2.2: sole importer is the fantasycalc import that B1 removes | scoutcap | Delete in the same batch as B1. | Otherwise it's a fourth copy of league settings with no reader. |
-| R2 | Per-app copies of `dynasty_core/` and of the four `test_dynasty_core_*` files | §1, §9 | both | Delete when the pin lands (the extraction batch itself). | Leaving them turns the pin into a fifth source of truth. |
+| R2 | **RESOLVED in 2C-7.** Per-app copies of `dynasty_core/` and of the four `test_dynasty_core_*` files | §1, §9 | both | Delete when the pin lands (the extraction batch itself). | Leaving them turns the pin into a fifth source of truth. |
 
 Deliberately **not** in this category: `tools/espn.py::get_nfl_team` is dead
 and safe to remove, and `get_nfl_injuries` needs forensics (§6). Both are
@@ -1184,3 +1184,87 @@ rule rejects it on `" @ "`, `git+` and `://`.
 - `dynasty_core/` and Ddreportcards runtime are unchanged.
 
 **Remaining pre-extraction action:** **R2** only.
+
+---
+
+## 2C-7 completion — canonical dynasty-core extracted; both apps cut over (R2)
+
+**R2 — RESOLVED in 2C-7.** The shared package now exists exactly once, in its
+own public repository. Both consumers install it at one immutable commit, and
+neither carries a local copy.
+
+**Canonical package.**
+- Repository: `https://github.com/mcroney531-ctrl/dynasty-core` (public,
+  branch `main`, no license added).
+- Distribution `dynasty-core`, import package `dynasty_core`, version
+  `0.1.0`, `requires-python >=3.12`, sole runtime dependency
+  `httpx>=0.28.1,<0.29`.
+- **CORE_SHA = `cef3c3d2b7120825110235eb2c30b4f8dd9a0247`** (root commit).
+  It has never been amended or force-pushed.
+- Tag `v0.1.0`: created locally, but the push was refused (remote
+  disconnect). This is informational only; no consumer pins or may pin a tag.
+- Contents: `dynasty_core/{__init__,settings,sleeper,espn,fantasycalc}.py`
+  plus the 8 shared test files. It is a byte-for-byte extraction of the
+  frozen consumer source: 13/13 files are SHA-256 identical to both apps'
+  copies before cutover.
+
+**Package verification.**
+- Local build in a fresh Python 3.12 venv: the wheel holds only the 5
+  modules, the metadata is as above, and 90 package tests pass when run
+  from outside the checkout.
+- Remote install at exact SHA: `pip install
+  "dynasty-core @ git+https://github.com/mcroney531-ctrl/dynasty-core.git@CORE_SHA"`
+  into a fresh 3.12 venv imports from site-packages. PEP 610 records
+  `vcs=git`, `commit_id=CORE_SHA` and the canonical URL, and all 90 package
+  tests pass against the installed artifact.
+- The dependency checker's `check_git_install` returns OK for CORE_SHA and
+  MISMATCH for a wrong SHA.
+
+**Consumer cutovers (Scout first, DD second, same SHA).**
+
+| | scoutcap | Ddreportcards |
+|---|---|---|
+| Cutover commit | `a2cd79f` | `ec4534a` |
+| requirements.txt | 7 `==` pins (unchanged) + 1 Git pin | 8 `==` pins (byte-identical) + 1 Git pin |
+| Dependency checker (fresh 3.12.3 venv) | 8/8 OK | 9/9 OK |
+| Full suite (fresh 3.12.3 venv) | 83 OK (was 173) | 168 OK |
+| `dynasty_core` imported from | site-packages, `commit_id` = CORE_SHA | site-packages, `commit_id` = CORE_SHA |
+| Local `dynasty_core/` | deleted | deleted |
+| 8 shared package test files | deleted | deleted |
+| App smoke | AppTest startup and the Mock Draft arsenal path raise no exceptions | AppTest startup raises no exceptions; mocked Sleeper calls route through the installed package |
+| Imports | `tools.*`, agents, `mcp_server` | `data.*` facades, `data.sleeper_workflows`, all agents, `api` |
+
+**Ddreportcards production.** After the `ec4534a` push, the user ran
+`GET /health/deep`, which returned `status: ok`. Its chat budget reported
+the `redis` backend as configured, durable and reachable. No billable report
+smoke was run (not required).
+
+**Final no-duplication audit.**
+- Neither consumer tracks or contains a `dynasty_core/` directory, and none
+  of the 8 package test files remain in either.
+- Both consumers pin the identical CORE_SHA via the only allowed form.
+- Neither consumer defines any of the package's provider functions.
+- The only remaining direct ESPN endpoints outside the package are in
+  Scout's `tools/espn.py`, which is Scout-owned draft/college integration by
+  design (§4, §6) and shares no functions with `dynasty_core.espn`.
+- Ddreportcards' `test_dynasty_core_source_ownership.py` is an app-owned
+  agent/client boundary contract, not a package test, and it stays.
+
+**Final ownership model.**
+- `mcroney531-ctrl/dynasty-core`: the provider primitives (Sleeper, ESPN
+  NFL stats and injuries, FantasyCalc), the package-owned FantasyCalc
+  profile in `settings.py`, and the 90 behavioral tests. Changes land as a
+  new commit there, and consumers adopt the new SHA explicitly. Package
+  history is never rewritten.
+- scoutcap: the `tools/sleeper.py` and `tools/fantasycalc.py` facades, the
+  Scout-owned `tools/espn.py` (draft/college), the app, the agents and
+  `mcp_server`.
+- Ddreportcards: the `data/*_client.py` facades, `data/sleeper_workflows.py`
+  (cross-season trades, owner resolution, roster enrichment), the agents,
+  `api` and the app.
+- Both apps: the AST-identical `scripts/check_dependency_versions.py` and
+  the immutable Git-pin contract tests.
+
+D1–D5 remain deferred and untouched.
+
+**Stage 2 shared-core extraction complete.**
