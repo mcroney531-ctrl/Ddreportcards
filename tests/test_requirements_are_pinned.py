@@ -48,6 +48,14 @@ class RequirementsAreFullyPinnedTest(unittest.TestCase):
         self.assertIn("google-adk[extensions]==", text)
         self.assertIn("uvicorn[standard]==", text)
 
+    def test_no_git_dependency_yet(self):
+        # Stage 2C-6 taught the checker the immutable dynasty-core Git form,
+        # but the real pin arrives in 2C-7. Until then the actual file holds
+        # only the eight ==-pins; 2C-7 updates this test deliberately.
+        specs = check_versions.parse_requirements()
+        self.assertEqual(len(specs), 8)
+        self.assertTrue(all(spec["kind"] == "version" for spec in specs.values()))
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -425,7 +425,7 @@ correct.
 |---|---|---|---|---|---|
 | F1 | **RESOLVED in 2C-3.** Ddreportcards-only workflows inside the shared namespace | §5: `get_all_trades_all_seasons`, `get_roster_by_display_name`, `resolve_roster_players` are called only by DD and encode DD identity/annotation policy | `dynasty_core/sleeper.py`; DD `data/sleeper_client.py`, `api.py`, `app.py`, `data/trade_history.py` | Move them into a Ddreportcards-owned module. Re-point DD's facade and `api.py`'s direct import; callers otherwise unchanged. Keep `get_league_season_chain`. | Whatever ships in v1 becomes the versioned contract. Removing them later is a breaking package release; removing them now is a local DD refactor. |
 | F2 | **RESOLVED in 2C-1** (package-level FantasyCalc/ESPN/Sleeper coverage). Package-level tests missing for FantasyCalc and ESPN | §9.1 | new package test suite | Write the FantasyCalc and ESPN provider-contract and cache tests (and the Sleeper primitive URL tests) **before** extraction, run them against the current copies, then move them with the package. | Extraction must not be the first time the package's behavior is specified. The FantasyCalc cache has a documented history of silent wrong answers. |
-| F3 | Ddreportcards pin contract can't express a Git dependency | §7: `test_requirements_are_pinned.py` and `check_dependency_versions.py` accept only `==` pins and exactly 8 names | DD `tests/test_requirements_are_pinned.py`, `scripts/check_dependency_versions.py` | Extend both, deliberately, to accept one additional form: `dynasty-core @ git+https://…@<40-hex SHA>`. Reject branch names and tags. | Otherwise the first packaging commit either fails CI or quietly weakens the Phase 4B guarantee. |
+| F3 | **RESOLVED in 2C-6.** Ddreportcards pin contract can't express a Git dependency | §7: `test_requirements_are_pinned.py` and `check_dependency_versions.py` accept only `==` pins and exactly 8 names | DD `tests/test_requirements_are_pinned.py`, `scripts/check_dependency_versions.py` | Extend both, deliberately, to accept one additional form: `dynasty-core @ git+https://…@<40-hex SHA>`. Reject branch names and tags. | Otherwise the first packaging commit either fails CI or quietly weakens the Phase 4B guarantee. |
 | F4 | **RESOLVED in 2C-5.** Scout requirements unpinned | §7 | scoutcap `requirements.txt` | Pin the direct dependencies to known-good versions (the same method as DD's Phase 4B). | The release gate (§9.3 step 3) is not reproducible without it. |
 | F5 | **RESOLVED in 2C-4.** Scout `_load_pick_arsenal` Sleeper bypass | §4.1 | scoutcap `app.py` 854–866 | Replace the two direct calls with `get_users_in_league` / a newly facade-exported `get_traded_picks`. Keep `season` as an explicit argument (the caller already passes `"2026"`). Do **not** change the year policy in this batch. | Small. It leaves exactly one Sleeper HTTP implementation per app before the pin is introduced, so the version pin governs *all* Sleeper behavior in both apps. It also stops a non-2xx body being parsed as data. |
 
@@ -1033,3 +1033,107 @@ change.
 **Remaining pre-extraction mechanics:**
 - **F3** — Ddreportcards immutable Git-pin contract;
 - **R2** — extraction and removal of the local copies.
+
+---
+
+## 2C-6 completion — immutable dynasty-core Git-pin contract (F3)
+
+**The future dependency contract**, the single allowed exception to exact
+`==` pins:
+
+```
+dynasty-core @ git+https://github.com/mcroney531-ctrl/dynasty-core.git@<40-char lowercase commit SHA>
+```
+
+It is tied to one distribution (`dynasty-core`, canonical spelling), one
+repository (`mcroney531-ctrl/dynasty-core`, `.git` URL), one transport
+(`git+https`) and one revision form (a full 40-hex lowercase commit SHA).
+- **Tags are human labels only.** They are mutable and never pinned.
+- **Branches are forbidden.**
+- **Short SHAs are forbidden.**
+- **No credentials** may appear in the URL (the repo is public).
+- **No other package may use a VCS/URL form.**
+- **`dynasty-core` is not accepted as an ordinary `==` pin either.** It is
+  published to no package index, so `dynasty-core==x` would resolve against
+  PyPI, a dependency-confusion risk.
+
+**The actual requirement is intentionally not added until 2C-7.**
+`requirements.txt` is unchanged at eight `==` pins.
+
+**`scripts/check_dependency_versions.py` (refactored):**
+- **Parsing.** A structured parser (`parse_requirement_line` /
+  `parse_requirements_text` / `parse_requirements`) returns
+  `{"kind": "version", ...}` or `{"kind": "git", "value": sha, "repo": ...}`
+  per dependency.
+- **Invalid lines fail.** Every non-comment line must be one of the two
+  forms, and duplicates (PEP 503-normalized) are rejected. Failures raise
+  `RequirementsError` listing every problem, and `main()` exits 2.
+  **Invalid lines no longer disappear with a warning.** The pre-2C-6 parser
+  silently dropped both the future valid Git line and an invalid
+  `fastapi>=0.1` range line.
+- **Compatibility.** `parse_pins()` is kept as a helper (version pins only)
+  and now raises on an invalid file.
+- **Installed-source check.** For the Git spec, the checker validates the
+  installed package's PEP 610 `direct_url.json`:
+  - it must exist and parse;
+  - `vcs_info.vcs == "git"`;
+  - `vcs_info.commit_id ==` the pinned SHA (authoritative;
+    `requested_revision` is shown for diagnostics only);
+  - `url` must equal the expected repository. Only a trailing `.git` and
+    `/` are normalized, so a different owner or repo, or a
+    credential-bearing URL, is a mismatch even if the commit matches.
+  - Ordinary pins are still checked with `importlib.metadata.version`.
+
+**Tests:**
+- New `tests/test_dependency_contract.py` (19 tests; fixture strings and
+  mocked metadata only):
+  - **Accepts:** the valid immutable line, and a future nine-line file
+    (eight pins plus one Git entry).
+  - **Rejects 23 forms:** `main`/`master` branches, a tag, 7- and 16-char
+    SHAs, 39 and 41 hex, an uppercase SHA, a missing revision, a different
+    owner or repository, `git+ssh`, a plain https archive, `token@` and
+    `user:pass@` credentials, VCS for `httpx`/`requests`, `dynasty_core`
+    spelling, a missing `.git`, `dynasty-core==0.1.0`, bare `dynasty-core`,
+    extras on the Git form, and an environment marker. Each is rejected both
+    alone and inside a whole file.
+  - **Ordinary pins not weakened:** ranges, bare names, URL wheels,
+    `-e`/`--index-url` are rejected; invalid lines fail rather than skip;
+    duplicate and normalized-duplicate names are rejected.
+  - **Installed-source checker** (mocked metadata): matching → OK;
+    benign URL spellings → OK; wrong commit, missing `direct_url.json`,
+    malformed `direct_url.json`, non-git VCS, and wrong repository (with a
+    matching commit) → MISMATCH; not installed → MISSING.
+  - **`main()` dispatch:** the Git spec is checked by source, not version,
+    and an invalid file makes `main()` fail.
+- `tests/test_requirements_are_pinned.py`: the actual-file contract is
+  **unchanged** (exactly eight `==` pins). One assertion was added: under
+  the full parser today's file has no Git entry. 2C-7 will update the
+  expected set from eight to nine in the same commit that adds the real
+  pin.
+
+**Fail-first.**
+- Against the pre-2C-6 checker, all 19 new tests error; it has no
+  structured parser and silently skips the future line.
+- A deliberately over-broad rule (any `name @ git+https://…@40hex`, not
+  committed) would wrongly accept **10 of the 23** rejection fixtures:
+  different owner or repository, credentials, other packages, uppercase SHA,
+  non-canonical spelling, extras, missing `.git`.
+
+**Current eight-pin diagnostic.**
+- In this sandbox (not Render), the new checker reports the same 6/8 as
+  before: `anthropic` 1.6.0 vs pinned 1.7.0, `litellm` 1.101.0 vs pinned
+  1.102.0. Pins are unchanged, because they come from the known-good
+  deployment and stay authoritative.
+- In a clean Python 3.12 venv built only from the unchanged
+  `requirements.txt`: **8/8 `[OK]`** (`anthropic` 1.7.0 and `litellm` 1.102.0
+  included). The checker reads a real environment correctly; the sandbox
+  mismatches are only the sandbox.
+
+No change to `requirements.txt`, `dynasty_core/`, `data/`, `agents/`,
+`api.py`, `app.py` or the Render config. Scout is untouched.
+
+Totals: Ddreportcards 238 → **258**, all green.
+
+**Remaining pre-extraction item:** **R2** — create the canonical
+`dynasty-core` repository, install both apps by exact commit, and remove
+the local copies. D1–D5 stay deferred.
