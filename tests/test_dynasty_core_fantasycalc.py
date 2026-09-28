@@ -236,6 +236,55 @@ class AccessorsTest(_CacheReset):
             self.assertIsNone(fc.get_player_value("999"))
 
 
+class RedraftRankTransformDoesNotMutateInputTest(_CacheReset):
+    """Stage 2C-4.5 (audit O2): index_by_sleeper_id_with_redraft_rank used to
+    write redraftPositionRank into the entry dicts it was given. When a caller
+    passed the cached get_dynasty_values() list (Ddreportcards' situation
+    agent does), that silently mutated the shared FantasyCalc cache."""
+
+    def _payload(self):
+        import copy
+        return copy.deepcopy(PAYLOAD)
+
+    def test_rankings_unchanged(self):
+        idx = fc.index_by_sleeper_id_with_redraft_rank(self._payload())
+        self.assertEqual({sid: e["redraftPositionRank"] for sid, e in idx.items()},
+                         {"100": 1, "101": 2, "200": 1})
+
+    def test_input_entries_gain_no_rank_field(self):
+        payload = self._payload()
+        fc.index_by_sleeper_id_with_redraft_rank(payload)
+        self.assertFalse(any("redraftPositionRank" in e for e in payload))
+        self.assertEqual(payload, PAYLOAD)
+
+    def test_cached_default_payload_is_not_mutated(self):
+        with mock.patch.object(fc.httpx, "get", return_value=_fake_response(self._payload())), \
+             mock.patch.object(fc.time, "time", return_value=1000.0):
+            cached = fc.get_dynasty_values()
+            fc.index_by_sleeper_id_with_redraft_rank(cached)
+            again = fc.get_dynasty_values()  # cache hit
+        self.assertIs(again, cached)
+        self.assertFalse(any("redraftPositionRank" in e for e in fc._values_cache[fc._default_params_key()][1]))
+
+    def test_returned_entries_are_distinct_top_level_dicts(self):
+        payload = self._payload()
+        idx = fc.index_by_sleeper_id_with_redraft_rank(payload)
+        by_id = fc.index_by_sleeper_id(payload)
+        for sid in idx:
+            with self.subTest(sid):
+                self.assertIsNot(idx[sid], by_id[sid])
+
+    def test_provider_fields_and_nested_data_intact(self):
+        payload = self._payload()
+        idx = fc.index_by_sleeper_id_with_redraft_rank(payload)
+        source = fc.index_by_sleeper_id(payload)
+        for sid, entry in idx.items():
+            with self.subTest(sid):
+                expected = dict(source[sid], redraftPositionRank=entry["redraftPositionRank"])
+                self.assertEqual(entry, expected)
+                self.assertEqual(entry["player"], source[sid]["player"])
+
+
 class CondensedIndexFreshnessThroughGetPlayerValueTest(_CacheReset):
     """Stage 2C-1.5 (audit O1): get_player_value() must honour the values
     cache's TTL. _values_cache + _VALUES_TTL_SECONDS is the single freshness

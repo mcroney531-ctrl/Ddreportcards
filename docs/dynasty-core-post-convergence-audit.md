@@ -424,7 +424,7 @@ correct.
 | # | Item | Evidence | Affected | Recommended action | Why here (not deferred) |
 |---|---|---|---|---|---|
 | F1 | **RESOLVED in 2C-3.** Ddreportcards-only workflows inside the shared namespace | §5: `get_all_trades_all_seasons`, `get_roster_by_display_name`, `resolve_roster_players` are called only by DD and encode DD identity/annotation policy | `dynasty_core/sleeper.py`; DD `data/sleeper_client.py`, `api.py`, `app.py`, `data/trade_history.py` | Move them into a Ddreportcards-owned module. Re-point DD's facade and `api.py`'s direct import; callers otherwise unchanged. Keep `get_league_season_chain`. | Whatever ships in v1 becomes the versioned contract. Removing them later is a breaking package release; removing them now is a local DD refactor. |
-| F2 | Package-level tests missing for FantasyCalc and ESPN | §9.1 | new package test suite | Write the FantasyCalc and ESPN provider-contract and cache tests (and the Sleeper primitive URL tests) **before** extraction, run them against the current copies, then move them with the package. | Extraction must not be the first time the package's behavior is specified. The FantasyCalc cache has a documented history of silent wrong answers. |
+| F2 | **RESOLVED in 2C-1** (package-level FantasyCalc/ESPN/Sleeper coverage). Package-level tests missing for FantasyCalc and ESPN | §9.1 | new package test suite | Write the FantasyCalc and ESPN provider-contract and cache tests (and the Sleeper primitive URL tests) **before** extraction, run them against the current copies, then move them with the package. | Extraction must not be the first time the package's behavior is specified. The FantasyCalc cache has a documented history of silent wrong answers. |
 | F3 | Ddreportcards pin contract can't express a Git dependency | §7: `test_requirements_are_pinned.py` and `check_dependency_versions.py` accept only `==` pins and exactly 8 names | DD `tests/test_requirements_are_pinned.py`, `scripts/check_dependency_versions.py` | Extend both, deliberately, to accept one additional form: `dynasty-core @ git+https://…@<40-hex SHA>`. Reject branch names and tags. | Otherwise the first packaging commit either fails CI or quietly weakens the Phase 4B guarantee. |
 | F4 | Scout requirements unpinned | §7 | scoutcap `requirements.txt` | Pin the direct dependencies to known-good versions (the same method as DD's Phase 4B). | The release gate (§9.3 step 3) is not reproducible without it. |
 | F5 | **RESOLVED in 2C-4.** Scout `_load_pick_arsenal` Sleeper bypass | §4.1 | scoutcap `app.py` 854–866 | Replace the two direct calls with `get_users_in_league` / a newly facade-exported `get_traded_picks`. Keep `season` as an explicit argument (the caller already passes `"2026"`). Do **not** change the year policy in this batch. | Small. It leaves exactly one Sleeper HTTP implementation per app before the pin is introduced, so the version pin governs *all* Sleeper behavior in both apps. It also stops a non-2xx body being parsed as data. |
@@ -600,7 +600,7 @@ committed checkpoint stays green.
     FantasyCalc values never refresh after first load. Ddreportcards doesn't
     call `get_player_value`, so it's unaffected.
   - Handled as its own correctness interlude (2C-1.5), separately from B1.
-- **O2 — OPEN. Classification: pre-extraction cleanup candidate; no
+- **O2 — RESOLVED in 2C-4.5** (see below). Originally: OPEN. Classification: pre-extraction cleanup candidate; no
   demonstrated current correctness bug.**
   `index_by_sleeper_id_with_redraft_rank()` writes `redraftPositionRank`
   into the entry dicts it's given. When the caller passes the cached
@@ -903,3 +903,57 @@ Ddreportcards runtime is untouched; this section is its only change.
 
 Totals: scoutcap 133 → **144**, all green. Ddreportcards unchanged at
 **233**. D1, D3 and O2 are untouched.
+
+---
+
+## 2C-4.5 completion — FantasyCalc redraft-rank transform no longer mutates its input (O2)
+
+**Caller audit.** The only active caller is Ddreportcards
+`agents/situation_agent.py::assess_position_competition`, via
+`data.fantasycalc_client`. It passes the cached `get_dynasty_values()` list
+and reads only the returned ranked entries. Scout re-exports the name from
+its facade and has no caller.
+
+**Fix.** `index_by_sleeper_id_with_redraft_rank()` now ranks shallow copies
+of the entries (`dict(entry)` per indexed player) instead of the input dicts.
+Only a top-level `redraftPositionRank` is added, so a shallow copy is
+enough; nested provider data (`player`, etc.) is shared read-only, not deep
+copied. The returned schema, the ranking by `redraftValue` within position,
+None/0 handling and rank numbering are unchanged. The only semantic change is
+that the input payload, often the shared FantasyCalc cache, is no longer
+mutated. No other package file changed. The cache, TTL, 2C-1.5 freshness,
+settings, `GRADE_TIERS` and `value_grade` are untouched.
+
+**Tests** (added to shared `tests/test_dynasty_core_fantasycalc.py`,
+byte-identical in both repos, 5 tests):
+- rankings unchanged;
+- input entries gain no `redraftPositionRank`, and the input equals the
+  original fixture;
+- the cached default payload is not mutated when it is passed in directly;
+- returned entries are distinct top-level dicts;
+- provider fields and nested data are intact.
+
+Against the pre-fix implementation the three mutation tests fail (input,
+cache, distinct objects). The ranking and data-intact tests pass before and
+after, by design.
+
+**Active consumer check** (mocked Sleeper/FantasyCalc through the real
+facades, not committed). `assess_position_competition("KC", "WR", ...)`:
+- before the fix, the cached payload was mutated;
+- after the fix, it isn't;
+- the competition result (grades, redraft ranks, dynasty values, room
+  strength) is **identical** before and after.
+
+`fantasycalc.py` is now `7c8f5613389c9fa700f4fe366b9cf03ad4e2d037b5963d2ec5d51b352067fdbb`
+in both repos. The shared FantasyCalc test is now
+`dc112eaebf605f96081f3a41b6637a957e7ddff41c56c61e4b3b0faa48791b92`. All
+other package and shared test files are unchanged.
+
+Totals: Ddreportcards 233 → **238**, scoutcap 144 → **149**, all green.
+
+**State after 2C-4.5.** The package candidate is behaviorally clean: B1, F1,
+F2, F5, O1, O2 and R1 are all resolved. The remaining pre-extraction items
+are release and deployment mechanics only:
+- **F4** — Scout requirements pinning;
+- **F3** — Ddreportcards immutable Git-pin contract;
+- **R2** — extraction and removal of the local copies.

@@ -130,8 +130,10 @@ def index_by_sleeper_id_with_redraft_rank(values: list[dict]) -> dict[str, dict]
 
     Derived by sorting each position group by redraftValue — reflects who is
     actually eating snaps now, the relevant signal for grading on-field competition.
+    Returns shallow copies: the input entries (often the cached payload) are
+    never modified.
     """
-    by_sleeper = index_by_sleeper_id(values)
+    by_sleeper = {sid: dict(entry) for sid, entry in index_by_sleeper_id(values).items()}
     by_position: dict[str, list[str]] = {}
     for sid, entry in by_sleeper.items():
         pos = entry["player"].get("position")
