@@ -6,3 +6,4 @@ httpx==0.28.1
 python-dotenv==1.2.3
 fastapi==0.141.1
 uvicorn[standard]==0.53.0
+dynasty-core @ git+https://github.com/mcroney531-ctrl/dynasty-core.git@cef3c3d2b7120825110235eb2c30b4f8dd9a0247
