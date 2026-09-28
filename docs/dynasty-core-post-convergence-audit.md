@@ -1137,3 +1137,50 @@ Totals: Ddreportcards 238 → **258**, all green.
 **Remaining pre-extraction item:** **R2** — create the canonical
 `dynasty-core` repository, install both apps by exact commit, and remove
 the local copies. D1–D5 stay deferred.
+
+---
+
+## 2C-6.5 — Scout gets the same immutable dynasty-core Git-pin contract
+
+**Prerequisite found in the pre-2C-7 review.** Scout's 2C-5 exact-pin guard
+could not represent the future immutable dynasty-core Git dependency. Its
+pin test rejected every `" @ "`/`git+`/`://` line, and its checker parsed only
+`==` pins; it silently dropped the future line with a warning. Extraction
+would have forced Scout's dependency contract to change in the same commit
+that deletes its local package copy. That prerequisite is **resolved in
+2C-6.5**.
+
+This is not a reversal of F4. F4 pinned Scout's existing seven direct
+dependencies, and that still holds. 2C-6.5 prepares the same contract for
+the eighth dependency that extraction introduces.
+
+**Change (scoutcap only; no runtime, package or requirements change):**
+- `scripts/check_dependency_versions.py` is the Ddreportcards `18be0ab`
+  checker. Its code is AST-identical, and only four docstring lines differ.
+  It accepts exactly `name[extras]==version` and
+  `dynasty-core @ git+https://github.com/mcroney531-ctrl/dynasty-core.git@<40 lowercase hex>`.
+  Invalid lines and normalized duplicates hard-fail, `dynasty-core` is never
+  accepted as an index pin, and the Git install is verified via PEP 610
+  `direct_url.json` (commit_id authoritative, repository matched, only a
+  trailing `.git` and `/` normalized).
+- `tests/test_dependency_contract.py`: Ddreportcards' 19 fixture and
+  mocked-metadata tests, adapted only for Scout's seven-line baseline. It
+  accepts the valid line and a future eight-line file, rejects the same 23
+  forms, and covers the same installed-source cases.
+- `tests/test_requirements_are_pinned.py`: the blanket
+  "no VCS/URL syntax ever" assertion is replaced by an actual-file assertion
+  (exactly seven version-kind specs, no Git dependency yet). Every other
+  actual-file check is unchanged.
+
+**Fail-first.** Against Scout's pre-2C-6.5 checker, all 19 contract tests
+error. The old checker silently skips the future line, and the old pin
+rule rejects it on `" @ "`, `git+` and `://`.
+
+**Verification.**
+- `requirements.txt` is unchanged (7 pins, no Git dependency).
+- The diagnostic reports 7/7 `[OK]` in the sandbox and in the 2C-5 clean
+  Python 3.12.3 venv.
+- The Scout suite passes **173 OK** in both environments.
+- `dynasty_core/` and Ddreportcards runtime are unchanged.
+
+**Remaining pre-extraction action:** **R2** only.
