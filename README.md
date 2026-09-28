@@ -19,10 +19,10 @@ streamlit run app.py
 - `data/` — API clients: Sleeper (rosters/players), ESPN hidden Core API (current
   production, injuries), FantasyCalc (dynasty values).
 - `agents/situation_agent.py` — opportunity grade (depth chart, competition quality).
-- `agents/production_agent.py` — production grade + risk modifier (durability,
-  injury probability, age curve).
-- `agents/market_agent.py` — hybrid trade value (proprietary composite blended with
-  FantasyCalc dynasty consensus).
+- `agents/production_agent.py` — production grade (on-field production only) + a
+  separate risk modifier (current health score, aging risk).
+- `agents/market_agent.py` — Trade Value grade (FantasyCalc market-consensus standing)
+  + Hybrid Market Value (FantasyCalc value nudged by our proprietary composite).
 - `agents/synthesis_agent.py` — orchestrates the three into one player card.
 - `agents/roster_agent.py` — aggregates player cards into the overall roster grade.
 - `agents/trade_agent.py` — flags sell candidates with reasoning.

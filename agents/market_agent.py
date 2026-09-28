@@ -1,17 +1,24 @@
 """
 Market Agent — Trade Value / Market category. New agent, no Scout equivalent.
 
-Computes a proprietary composite from our own Situation/Production/Risk grades
-(Talent/Opportunity/Risk spirit of Scout's composite, reweighted — no draft
-capital and no sentiment, since trending adds are color only, not scored),
-then blends it with FantasyCalc's dynasty value consensus into one hybrid
-market value. FantasyCalc is the anchor (KeepTradeCut is intentionally not
-used — no public API, ToS forbids scraping); our composite can only nudge the
-number, reflecting where our own grading agrees or diverges from the market.
+Two distinct outputs, deliberately kept apart:
+  - Trade Value Grade (trade_value_score / trade_value_grade): the player's
+    FantasyCalc market-consensus standing, i.e. market_percentile within
+    their position. Our own grading does not change it. This is what the
+    roster grade and the Trade Agent read.
+  - Hybrid Market Value (hybrid_market_value): our internal valuation. It
+    computes a proprietary composite from our own Opportunity/Production
+    grades plus current health and aging risk (Talent/Opportunity/Risk spirit
+    of Scout's composite, reweighted — no draft capital and no sentiment,
+    since trending adds are color only, not scored), then nudges
+    FantasyCalc's dynasty value by at most +/-25% toward it. That nudge is the
+    only place the composite lands.
+FantasyCalc is the anchor (KeepTradeCut is intentionally not used — no public
+API, ToS forbids scraping).
 
 Inputs:  Sleeper player_id + the Opportunity/Production/Risk outputs already
          computed by situation_agent and production_agent for this player.
-Outputs: structured market assessment with a hybrid Trade Value + trend note.
+Outputs: market-consensus Trade Value Grade, Hybrid Market Value, trend note.
 """
 
 import os, sys, json, re
@@ -37,7 +44,7 @@ from data import fantasycalc_client
 
 # Proprietary composite weights — Production carries the most weight (what a
 # player actually does on the field), Opportunity next (their path to keep
-# doing it), Risk last (durability/aging headwinds). No sentiment: trending
+# doing it), Risk last (current health + aging risk). No sentiment: trending
 # adds are explicitly not scored per project scope, only color.
 WEIGHTS = {"production": 0.45, "opportunity": 0.35, "risk": 0.20}
 
@@ -81,6 +88,8 @@ def compute_proprietary_composite(
     """
     Weighted composite (0-100) from our own agents' grades only — no market
     data. This is our independent view of the player's dynasty desirability.
+    It feeds blend_with_market (hybrid_market_value) only; it does not change
+    market_percentile or the Trade Value Grade.
     opportunity_score, production_score: 0-100 from situation_agent/production_agent
     current_health_score: 1-5 from production_agent's risk_modifier -- a current
         health/availability signal only, not a historical durability assessment
@@ -176,10 +185,16 @@ Letter grade conversion (same scale used by the other agents):
 
 SYSTEM_PROMPT = f"""You are the Market Agent for a dynasty fantasy football roster report card tool.
 
-Your job: determine a player's dynasty TRADE VALUE by blending our own independent
-grading (their Opportunity and Production grades, plus Risk) with FantasyCalc's dynasty
-value consensus — the sole market-consensus anchor for this project (KeepTradeCut is
-deliberately excluded, no public API).
+Your job: report a player's dynasty market standing and our internal valuation of it,
+anchored on FantasyCalc's dynasty value consensus — the sole market-consensus anchor for
+this project (KeepTradeCut is deliberately excluded, no public API). These are two
+different outputs:
+- Trade Value Grade: trade_value_score is market_percentile (FantasyCalc position
+  standing), rounded to an integer, and trade_value_grade is its letter. Our internal
+  composite does not change trade_value_score.
+- Hybrid Market Value: hybrid_market_value is the only output our internal composite
+  changes. It is FantasyCalc's dynasty_value nudged (at most +/-25%) toward our own
+  Opportunity/Production/Risk composite.
 
 {MARKET_CALIBRATION}
 
@@ -188,7 +203,8 @@ Tools available:
 - compute_proprietary_composite: Our own 0-100 composite from Opportunity/Production/Risk
   (Risk here is fed by current_health_score, a current health/availability signal --
   not a historical durability assessment or a forecast of future injury probability)
-- blend_with_market: Blends the composite with FantasyCalc's value into one hybrid market value
+- blend_with_market: Nudges FantasyCalc's value by the composite into the hybrid market value,
+  and returns the market_percentile the Trade Value Grade is taken from
 
 CRITICAL — the "name" field returned by get_market_consensus is the ONLY source of truth
 for the player's identity. Always use it verbatim for the "player" field in your output.
@@ -200,7 +216,8 @@ Steps:
 2. Call compute_proprietary_composite using the opportunity_score, production_score,
    current_health_score, and aging_risk provided to you in the user message
 3. Call blend_with_market with the proprietary composite to get the final hybrid market value
-4. Convert the resulting market_percentile into a letter grade using the calibration above
+4. Set trade_value_score to market_percentile (rounded) and convert it into a letter grade
+   using the calibration above — do not adjust it for our composite or the divergence
 5. Write a short trend note: is the market moving on this player (trend_30day), and does
    our internal view agree or diverge from consensus (the divergence/note from blend_with_market)?
 

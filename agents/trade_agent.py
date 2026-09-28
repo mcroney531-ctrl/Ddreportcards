@@ -7,8 +7,9 @@ every team's data, which comes in a later phase).
 
 Three signal types, all computed from the player cards produced by
 synthesis_agent + roster_agent's shared quality_score:
-  - sell_high: risk is rising (low current health or high aging risk) while
-    the market hasn't caught down yet — trade value is still elevated.
+  - sell_high: our internal risk flag is up (low current health or high aging
+    risk) while the market-consensus trade value is still elevated. We can't
+    observe why the market is where it is, only that the two disagree.
   - sell_before_drop: opportunity_score trails trade_value_score by a wide
     margin — the market hasn't priced in a declining role yet.
   - positional_surplus: enough real contributors at one position that the
@@ -80,9 +81,9 @@ def detect_sell_signals(player_cards_json: str) -> dict:
         ) or aging_risk == "high"
         if risk_rising and trade_value_score >= SELL_HIGH_MARKET_FLOOR:
             _flag(name, "sell_high", (
-                f"current_health_score={current_health}, aging_risk={aging_risk!r} (risk rising) but "
+                f"current_health_score={current_health}, aging_risk={aging_risk!r} (internal risk flag) but "
                 f"trade_value_score={trade_value_score} is still elevated (>= {SELL_HIGH_MARKET_FLOOR}) "
-                "— the market hasn't caught down to the risk yet."
+                "— market standing remains elevated despite our internal risk flag."
             ))
 
         gap = trade_value_score - opportunity_score

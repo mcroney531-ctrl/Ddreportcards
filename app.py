@@ -109,7 +109,8 @@ def render_score_detail(kind: str, detail: dict | None):
     elif kind == "market":
         st.markdown(
             f"**Dynasty value:** {detail.get('dynasty_value', '—')} &nbsp;·&nbsp; "
-            f"**Market percentile:** {detail.get('market_percentile', '—')}",
+            f"**Market percentile:** {detail.get('market_percentile', '—')} "
+            "(FantasyCalc position standing — the Trade Value grade)",
             unsafe_allow_html=True,
         )
         if detail.get("trend_note"):
@@ -369,7 +370,12 @@ elif st.session_state.view == "player":
     st.divider()
 
     m1, m2, m3 = st.columns(3)
-    m1.metric("Hybrid Market Value", card.get("hybrid_market_value", "—"))
+    m1.metric(
+        "Hybrid Market Value", card.get("hybrid_market_value", "—"),
+        help="FantasyCalc dynasty value nudged (at most ±25%) by our own production, "
+             "opportunity, current health and aging view. The Trade Value grade above is "
+             "FantasyCalc market standing only.",
+    )
     m2.metric("FantasyCalc Dynasty Value", card.get("dynasty_value", "—"))
     m3.metric("30-Day Trend", card.get("trend_30day", "—"))
 

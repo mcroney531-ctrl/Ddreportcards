@@ -79,9 +79,10 @@ def _make_tools(sub_results: dict):
         player_id: str, opportunity_score: int, production_score: int, current_health_score: int, aging_risk: str
     ) -> dict:
         """
-        Call the Market Agent to compute the player's dynasty Trade Value — a hybrid
-        of our own proprietary composite (built from the opportunity/production/risk
-        scores you pass in) and FantasyCalc's dynasty value consensus.
+        Call the Market Agent. Returns trade_value_score/trade_value_grade -- the
+        player's FantasyCalc market-consensus standing (position percentile) -- plus
+        hybrid_market_value: FantasyCalc's dynasty value nudged by our own proprietary
+        composite (built from the opportunity/production/risk scores you pass in).
         player_id: Sleeper player_id
         opportunity_score, production_score: from evaluate_situation/evaluate_production
         current_health_score, aging_risk: from evaluate_production's risk_modifier
