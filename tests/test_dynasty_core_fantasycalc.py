@@ -236,5 +236,80 @@ class AccessorsTest(_CacheReset):
             self.assertIsNone(fc.get_player_value("999"))
 
 
+class CondensedIndexFreshnessThroughGetPlayerValueTest(_CacheReset):
+    """Stage 2C-1.5 (audit O1): get_player_value() must honour the values
+    cache's TTL. _values_cache + _VALUES_TTL_SECONDS is the single freshness
+    authority; the condensed index is only reused while that says the
+    default values are still fresh. Previously the index short-circuited
+    before get_dynasty_values() ran, so a long-lived process (Scout) served
+    its first FantasyCalc snapshot forever."""
+
+    OLD = [_entry("100", "WR Old Name", "WR", 5000, 900, pos_rank=2)]
+    NEW = [_entry("100", "WR New Name", "WR", 5100, 950, pos_rank=1)]
+
+    def setUp(self):
+        super().setUp()
+        self.now = 1000.0
+        self.responses = []
+        self.http = mock.patch.object(fc.httpx, "get", side_effect=lambda *a, **k: self.responses.pop(0))
+        self.clock = mock.patch.object(fc.time, "time", side_effect=lambda: self.now)
+        self.spy = mock.patch.object(fc, "get_dynasty_values", wraps=fc.get_dynasty_values)
+        self.http_get = self.http.start()
+        self.clock.start()
+        self.gdv = self.spy.start()
+        self.addCleanup(mock.patch.stopall)
+
+    def test_first_call_fetches_and_builds_index(self):
+        self.responses = [_fake_response(self.OLD)]
+        self.assertEqual(fc.get_player_value("100")["name"], "WR Old Name")
+        self.assertEqual(self.http_get.call_count, 1)
+        self.assertIsNotNone(fc._index_cache)
+
+    def test_repeat_inside_ttl_checks_freshness_without_refetching(self):
+        self.responses = [_fake_response(self.OLD)]
+        fc.get_player_value("100")
+        index = fc._index_cache
+        self.now += TTL  # still fresh (<=)
+        self.assertEqual(fc.get_player_value("100")["name"], "WR Old Name")
+        self.assertEqual(self.gdv.call_count, 2)       # freshness path ran both times
+        self.assertEqual(self.http_get.call_count, 1)  # but no extra request
+        self.assertIs(fc._index_cache, index)
+
+    def test_after_ttl_refetches_once_and_rebuilds_from_new_payload(self):
+        self.responses = [_fake_response(self.OLD), _fake_response(self.NEW)]
+        fc.get_player_value("100")
+        old_index = fc._index_cache
+        self.now += TTL + 1
+        rec = fc.get_player_value("100")
+        self.assertEqual(self.http_get.call_count, 2)
+        self.assertEqual(rec["name"], "WR New Name")
+        self.assertEqual(rec["dynasty_value"], 5100)
+        self.assertIsNot(fc._index_cache, old_index)
+
+    def test_failed_refresh_after_ttl_raises_and_keeps_good_state(self):
+        self.responses = [_fake_response(self.OLD), _fake_response([], status_ok=False)]
+        fc.get_player_value("100")
+        good_entry = fc._values_cache[fc._default_params_key()]
+        good_index = fc._index_cache
+        self.now += TTL + 1
+        with self.assertRaises(httpx.HTTPStatusError):
+            fc.get_player_value("100")
+        self.assertEqual(fc._values_cache[fc._default_params_key()], good_entry)
+        self.assertIs(fc._index_cache, good_index)
+
+    def test_non_default_refresh_does_not_rebuild_default_index(self):
+        default_key = fc._default_params_key()
+        other = dict(is_dynasty=not default_key[0], num_qbs=default_key[1] + 1,
+                     num_teams=default_key[2] + 2, ppr=default_key[3] + 0.5)
+        self.responses = [_fake_response(self.OLD), _fake_response([{"other": True}])]
+        fc.get_player_value("100")
+        index = fc._index_cache
+        fc.get_dynasty_values(**other)
+        self.assertIs(fc._index_cache, index)
+        self.assertEqual(fc.get_player_value("100")["name"], "WR Old Name")
+        self.assertIs(fc._index_cache, index)
+        self.assertEqual(self.http_get.call_count, 2)
+
+
 if __name__ == "__main__":
     unittest.main()

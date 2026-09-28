@@ -588,7 +588,8 @@ committed checkpoint stays green.
 
 ### New observations while specifying FantasyCalc (not acted on, not encoded as contract)
 
-- **O1 — the condensed index never checks the TTL.**
+- **O1 — FIXED in 2C-1.5** (see the 2C-1.5 section below). Original
+  finding, kept for the record: the condensed index never checked the TTL.
   - What happens: `_build_condensed_index()` returns `_index_cache` as soon
     as it is set, without calling `get_dynasty_values()`. So
     `get_player_value()` keeps serving the first-built index until something
@@ -598,15 +599,58 @@ committed checkpoint stays green.
     itself. So in a long-lived Scout process (Streamlit, MCP server),
     FantasyCalc values never refresh after first load. Ddreportcards doesn't
     call `get_player_value`, so it's unaffected.
-  - Recommendation: triage alongside 2C-2. It's a correctness fix in
-    `fantasycalc.py`, separate from B1.
-- **O2 — the redraft-rank index writes into the caller's list.**
+  - Handled as its own correctness interlude (2C-1.5), separately from B1.
+- **O2 — OPEN. Classification: pre-extraction cleanup candidate; no
+  demonstrated current correctness bug.**
   `index_by_sleeper_id_with_redraft_rank()` writes `redraftPositionRank`
   into the entry dicts it's given. When the caller passes the cached
-  `get_dynasty_values()` list, as Ddreportcards' situation agent does, that
-  mutates the shared cache. It's harmless today because every caller
-  derives the same field the same way. It's worth knowing before the
-  package gains other consumers.
+  `get_dynasty_values()` list, as Ddreportcards' situation agent (its only
+  active caller) does, that mutates the shared cache. It's harmless today
+  because every caller derives the same field the same way. Hidden
+  mutation is still undesirable package behavior, so clean it up before
+  extraction.
 
-Neither behavior is asserted by the new tests, so fixing either later won't
-fight the baseline.
+O2 is not asserted by any test, so fixing it later won't fight the baseline.
+
+---
+
+## 2C-1.5 completion — FantasyCalc condensed-index freshness (O1)
+
+**Fix.** `_build_condensed_index()` now calls `get_dynasty_values()` first,
+on every call, and only then reuses `_index_cache`. `_values_cache` +
+`_VALUES_TTL_SECONDS` stays the single freshness authority:
+- While the default values are fresh, the call is a cache hit (no request)
+  and the existing index is reused.
+- When the default entry expires and refreshes successfully,
+  `get_dynasty_values()` already clears `_index_cache`, so the index rebuilds
+  from the new payload.
+- If the refresh fails, the provider error propagates, and both the old
+  `_values_cache` entry and the old `_index_cache` stay intact. No stale
+  data is served silently.
+
+No new timer, TTL, network layer, or refresh mode was added. B1 (ambient
+config) and O2 are untouched.
+
+**Tests** (added to `tests/test_dynasty_core_fantasycalc.py`, byte-identical
+in both repos): five cases through `get_player_value()` —
+1. the first call fetches and builds the index;
+2. a repeat inside the TTL runs the freshness path with no extra request;
+3. after the TTL there is exactly one new request, the index rebuilds, and
+   the new value is returned;
+4. a failed refresh after the TTL raises and preserves both caches;
+5. a non-default parameter-set refresh doesn't rebuild the default index.
+
+Against the pre-fix implementation, cases 2, 3 and 4 fail: no freshness
+check, no refetch, and stale data served silently instead of raising.
+Cases 1 and 5 guard unchanged behavior.
+
+**Scout consumer check** (mocked Sleeper and FantasyCalc, moving clock, not
+committed):
+- Before the TTL, MCP `dynasty_value` and situation
+  `assess_veteran_competition` resolved through the real `get_player_value`
+  with one FantasyCalc request.
+- After the TTL, the next call made exactly one new request and returned
+  the refreshed payload.
+- Streamlit `AppTest` of `app.py` raised no exceptions.
+
+Totals: Ddreportcards 201 → **206**, scoutcap 120 → **125**, all green.

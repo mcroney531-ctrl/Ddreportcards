@@ -143,10 +143,13 @@ def index_by_sleeper_id_with_redraft_rank(values: list[dict]) -> dict[str, dict]
 def _build_condensed_index() -> dict[str, dict]:
     """Build {sleeper_id: condensed_rec} used by get_player_value(). Cached alongside values."""
     global _index_cache
+    # get_dynasty_values() is the only freshness authority: it must run on
+    # every call so its TTL applies here too. A default-set refresh clears
+    # _index_cache, so a surviving index was built from still-fresh data.
+    data = get_dynasty_values()
     if _index_cache is not None:
         return _index_cache
 
-    data = get_dynasty_values()
     by_sleeper: dict[str, dict] = {}
     pos_players: dict[str, list[str]] = defaultdict(list)
 
