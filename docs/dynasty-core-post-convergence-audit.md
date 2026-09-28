@@ -427,7 +427,7 @@ correct.
 | F2 | Package-level tests missing for FantasyCalc and ESPN | §9.1 | new package test suite | Write the FantasyCalc and ESPN provider-contract and cache tests (and the Sleeper primitive URL tests) **before** extraction, run them against the current copies, then move them with the package. | Extraction must not be the first time the package's behavior is specified. The FantasyCalc cache has a documented history of silent wrong answers. |
 | F3 | Ddreportcards pin contract can't express a Git dependency | §7: `test_requirements_are_pinned.py` and `check_dependency_versions.py` accept only `==` pins and exactly 8 names | DD `tests/test_requirements_are_pinned.py`, `scripts/check_dependency_versions.py` | Extend both, deliberately, to accept one additional form: `dynasty-core @ git+https://…@<40-hex SHA>`. Reject branch names and tags. | Otherwise the first packaging commit either fails CI or quietly weakens the Phase 4B guarantee. |
 | F4 | Scout requirements unpinned | §7 | scoutcap `requirements.txt` | Pin the direct dependencies to known-good versions (the same method as DD's Phase 4B). | The release gate (§9.3 step 3) is not reproducible without it. |
-| F5 | Scout `_load_pick_arsenal` Sleeper bypass | §4.1 | scoutcap `app.py` 854–866 | Replace the two direct calls with `get_users_in_league` / a newly facade-exported `get_traded_picks`. Keep `season` as an explicit argument (the caller already passes `"2026"`). Do **not** change the year policy in this batch. | Small. It leaves exactly one Sleeper HTTP implementation per app before the pin is introduced, so the version pin governs *all* Sleeper behavior in both apps. It also stops a non-2xx body being parsed as data. |
+| F5 | **RESOLVED in 2C-4.** Scout `_load_pick_arsenal` Sleeper bypass | §4.1 | scoutcap `app.py` 854–866 | Replace the two direct calls with `get_users_in_league` / a newly facade-exported `get_traded_picks`. Keep `season` as an explicit argument (the caller already passes `"2026"`). Do **not** change the year policy in this batch. | Small. It leaves exactly one Sleeper HTTP implementation per app before the pin is introduced, so the version pin governs *all* Sleeper behavior in both apps. It also stops a non-2xx body being parsed as data. |
 
 ### SAFE TO DEFER
 
@@ -811,3 +811,95 @@ Verification:
   across repos (`sleeper.py` now `47b35ba1…`).
 
 O2 untouched; F5 and packaging not started.
+
+---
+
+## 2C-4 completion — Scout's last direct Sleeper HTTP removed (F5)
+
+**Pre-edit audit.** `scoutcap/app.py::_load_pick_arsenal` was the only
+direct Sleeper HTTP in Scout production code outside
+`dynasty_core/sleeper.py`: a helper-local `import os, httpx`, a `_BASE` URL,
+and `.json()` on unchecked `/league/{id}/users` and
+`/league/{id}/traded_picks` responses. No other Scout production file
+referenced `api.sleeper.app`. `tools/espn.py`'s ESPN HTTP is unrelated and
+was not touched.
+
+**Change (scoutcap only):**
+- `tools/sleeper.py` re-exports the shared `get_traded_picks` and lists it in
+  `__all__`. It still has no `httpx`, no URLs and no provider code.
+- `app.py` imports `get_users_in_league` and `get_traded_picks` from the
+  facade.
+- `_load_pick_arsenal` calls `get_user` → `get_rosters` →
+  `get_users_in_league` → `get_traded_picks`. The helper-local
+  `import os, httpx` and `_BASE` are gone; `os` was already imported at
+  module level.
+
+Nothing else in the helper changed: the `season="2026"` default and the sole
+caller's explicit `_load_pick_arsenal("2026")` (D1 stays deferred), the
+rounds 1–4 / ownership-override algorithm, own/acquired, `from_team`,
+`(round, orig_rid)` sort, the returned shape, and the
+`{"error": "Could not find your roster"}` path. The 4-round / 12-team
+assumptions and hidden error UX stay deferred (D3).
+
+**Why `get_traded_picks` came back to the facade.** Batch 6 removed it
+because it had no Scout caller. That reasoning still holds, but the caller
+fact changed: the arsenal helper is now a real consumer. So the facade
+exposes the shared primitive, and the app does not import shared core
+directly.
+
+**Error behavior, deliberately locked in.** The two migrated calls now
+inherit shared-core `raise_for_status()`. A non-2xx `/users` or
+`/traded_picks` response fails at the provider boundary instead of having its
+body parsed as picks. This matches the helper's first two calls
+(`get_user`, `get_rosters`), which already raised. No local catch was added.
+
+**Scout production Sleeper path (final):**
+
+```
+app / agent / MCP consumer
+  -> tools.sleeper compatibility facade
+  -> dynasty_core.sleeper
+  -> provider
+```
+
+Both Python apps now have exactly one Sleeper HTTP implementation:
+`dynasty_core.sleeper`.
+
+**Tests** (scoutcap only):
+- New `tests/test_pick_arsenal_shared_sleeper.py`, 11 tests. The real
+  `_load_pick_arsenal` is compiled out of `app.py`'s source.
+  - Unit tests over mocked shared primitives: exact calls, 2026 ownership,
+    shape and sort, season filtering (2027), the 2026 default and explicit
+    call, the missing-roster error dict, and error propagation.
+  - End-to-end tests beneath the facade. The fake `httpx.get` accepts only
+    the four shared URLs, **and only requests issued from
+    `dynasty_core/sleeper.py`**: success, and a non-2xx `/traded_picks` that
+    now raises.
+  - Source-boundary checks: no `api.sleeper.app` in Scout production source
+    outside `dynasty_core/`; no `httpx.get` in `app.py` or `tools/sleeper.py`.
+- `tests/test_tools_sleeper_facade.py`: Batch 6's "`get_traded_picks`
+  absent" assertion was deliberately replaced with an identity assertion
+  against the shared primitive. The docstring records why.
+
+Fail-first: against the pre-2C-4 `app.py` and facade, 10 of 11 new tests
+fail. The end-to-end test fails with
+`Sleeper request issued outside dynasty_core: app.py -> …/league/L1/users`,
+which is the bypass itself. The one pass is the 2026-policy guard.
+
+**Streamlit AppTest, Mock Draft Simulator path** (fake provider, not
+committed):
+- Success: clicking "Load from Sleeper →" stores the expected arsenal with
+  no exceptions. Every Sleeper request is one of the shared URLs.
+- Provider failure: a 500 on `/traded_picks` surfaces as `HTTPStatusError`
+  from `dynasty_core/sleeper.py` (`raise_for_status`), shown by Streamlit's
+  normal error display. `mock_arsenal` stays `None`, so no malformed data is
+  stored.
+
+**Invariants.** No `dynasty_core/` file and no shared test changed in either
+repo. All five package SHAs are identical to the pre-batch values
+(`sleeper.py` `47b35ba1…`, `fantasycalc.py` `70dd6a9b…`, `settings.py`
+`94e49df5…`, `espn.py` `40c6bb07…`, `__init__.py` `3c9a1a56…`).
+Ddreportcards runtime is untouched; this section is its only change.
+
+Totals: scoutcap 133 → **144**, all green. Ddreportcards unchanged at
+**233**. D1, D3 and O2 are untouched.
