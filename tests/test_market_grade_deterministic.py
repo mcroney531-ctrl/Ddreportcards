@@ -37,10 +37,15 @@ BOUNDARIES = {
 POOL = [{"player": {"position": "RB"}, "value": v} for v in range(2000, -1, -100)]
 
 
+def _entry(value):
+    return {"player": {"position": "RB", "name": "T"}, "value": value,
+            "positionRank": 1, "overallRank": 1, "trend30Day": 0, "redraftValue": 0}
+
+
 def _fc(value):
     return mock.patch.multiple(
         market_agent.fantasycalc_client,
-        get_value_for_sleeper_id=mock.Mock(return_value={"player": {"position": "RB", "name": "T"}, "value": value}),
+        get_value_for_sleeper_id=mock.Mock(return_value=_entry(value)),
         get_dynasty_values=mock.Mock(return_value=POOL),
     )
 
@@ -52,17 +57,21 @@ def _final_event(text):
     return event
 
 
-def _fake_runner(model_json, composite=70.0, call_blend=True):
-    """Stands in for the ADK Runner: calls the agent's own blend_with_market
-    tool the way the model would, then returns the model's (possibly wrong) JSON."""
+def _fake_runner(model_json, inputs=(75, 80, 5, "low"), call_blend=True):
+    """Stands in for the ADK Runner: calls the agent's own tools the way the
+    model would (consensus, composite from the run's inputs, blend), then
+    returns the model's (possibly wrong) JSON. Stage 3C.6 requires both
+    FantasyCalc-backed tools to have run for this player."""
     class FakeRunner:
         def __init__(self, *, agent, **_):
             self.agent = agent
 
         async def run_async(self, **_):
+            tools = {getattr(t, "__name__", ""): t for t in self.agent.tools}
+            tools["get_market_consensus"](player_id="p1")
+            comp = tools["compute_proprietary_composite"](*inputs)["proprietary_composite"]
             if call_blend:
-                blend = next(t for t in self.agent.tools if getattr(t, "__name__", "") == "blend_with_market")
-                blend(proprietary_composite=composite, player_id="p1")
+                tools["blend_with_market"](proprietary_composite=comp, player_id="p1")
             yield _final_event(json.dumps(model_json))
     return FakeRunner
 
@@ -72,9 +81,9 @@ WRONG = {"player": "T", "position": "RB", "dynasty_value": 1, "hybrid_market_val
          "trend_30day": 0, "trend_note": "", "key_factors": [], "summary": ""}
 
 
-def _run_market(value, composite=70.0, model_json=WRONG, call_blend=True):
-    with _fc(value), mock.patch.object(market_agent, "Runner", _fake_runner(model_json, composite, call_blend)):
-        return asyncio.run(market_agent.run_market_agent("p1", 75, 80, 5, "low"))
+def _run_market(value, inputs=(75, 80, 5, "low"), model_json=WRONG, call_blend=True):
+    with _fc(value), mock.patch.object(market_agent, "Runner", _fake_runner(model_json, inputs, call_blend)):
+        return asyncio.run(market_agent.run_market_agent("p1", *inputs))
 
 
 class MarketGradeTableTest(unittest.TestCase):
@@ -126,22 +135,25 @@ class RunnerEnforcesDeterministicGradeTest(unittest.TestCase):
         pool = [{"player": {"position": "RB"}, "value": v} for v in range(100, -1, -1)]
         with mock.patch.multiple(
             market_agent.fantasycalc_client,
-            get_value_for_sleeper_id=mock.Mock(return_value={"player": {"position": "RB", "name": "T"}, "value": 59}),
+            get_value_for_sleeper_id=mock.Mock(return_value=_entry(59)),
             get_dynasty_values=mock.Mock(return_value=pool),
         ), mock.patch.object(market_agent, "Runner", _fake_runner(WRONG)):
             out = asyncio.run(market_agent.run_market_agent("p1", 75, 80, 5, "low"))
         self.assertEqual((out["market_percentile"], out["trade_value_score"], out["trade_value_grade"]), (59.0, 59, "B-"))
 
     def test_composite_cannot_move_score_or_grade(self):
-        results = {c: _run_market(1200, composite=c) for c in (0.0, 50.2, 82.2, 100.0)}
-        self.assertEqual({(r["trade_value_score"], r["trade_value_grade"]) for r in results.values()}, {(60, "B-")})
-        self.assertEqual(len({r["hybrid_market_value"] for r in results.values()}), 1)  # model's echo untouched
+        # Composites 82.2 / 70.2 / 55.2 / 32.2 from our own inputs: the grade holds,
+        # while (since Stage 3C.6) the returned hybrid value follows the tool.
+        inputs = [(75, 80, 5, "low"), (75, 80, 5, "high"), (75, 80, 2, "high"), (40, 40, 1, "high")]
+        results = [_run_market(1200, inputs=i) for i in inputs]
+        self.assertEqual({(r["trade_value_score"], r["trade_value_grade"]) for r in results}, {(60, "B-")})
+        self.assertEqual(len({r["hybrid_market_value"] for r in results}), len(inputs))
 
-    def test_without_a_tool_result_grades_the_model_percentile_deterministically(self):
-        # No blend_with_market call to capture: the model's percentile is the only
-        # one available, but the score/grade are still derived in code (12.0 -> D-, not the model's F).
+    def test_without_a_blend_result_the_run_fails(self):
+        # Stage 3C.6 removed the 3C.5 fallback to the model's own percentile.
         out = _run_market(1200, call_blend=False)
-        self.assertEqual((out["trade_value_score"], out["trade_value_grade"]), (12, "D-"))
+        self.assertIn("error", out)
+        self.assertNotIn("trade_value_grade", out)
 
 
 class SellBeforeDropWordingTest(unittest.TestCase):

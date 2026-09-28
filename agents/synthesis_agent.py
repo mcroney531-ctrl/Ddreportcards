@@ -30,6 +30,10 @@ from agents.situation_agent import run_situation_agent
 from agents.production_agent import run_production_agent
 from agents.market_agent import run_market_agent
 
+# Deterministic Market facts the player card exposes; copied from the Market
+# result in code (see run_synthesis_agent).
+MARKET_CARD_FIELDS = ("dynasty_value", "hybrid_market_value", "trend_30day", "trade_value_score", "trade_value_grade")
+
 # ── Thread helper (avoids nested-asyncio issue under Streamlit) ───────────────
 
 def _run_in_thread(coro):
@@ -192,13 +196,18 @@ async def run_synthesis_agent(player_id: str) -> dict:
     json_match = re.search(r'\{.*\}', result_text, re.DOTALL)
     if json_match:
         card = json.loads(json_match.group())
-        # The Market result's score/grade are computed in code; don't trust the
-        # synthesis model's copy of them (the card is what the app shows and
-        # the roster grades).
-        market = sub_results.get("market") or {}
-        for key in ("trade_value_score", "trade_value_grade"):
-            if key in market:
-                card[key] = market[key]
+        # Market facts on the card are copied from the Market result in code,
+        # never from the synthesis model's copy (the card is what the app shows
+        # and the roster grades). No usable Market result -> the card fails,
+        # using the same {"error", "player", "position"} shape the app and API
+        # already treat as a failed card.
+        market = sub_results.get("market")
+        if not market or "error" in market or "raw_output" in market:
+            reason = (market or {}).get("error") or ("unstructured market output" if market else "market agent did not run")
+            return {"error": f"market evaluation unavailable: {reason}", "player": card.get("player"),
+                    "position": card.get("position"), "_detail": sub_results}
+        for key in MARKET_CARD_FIELDS:
+            card[key] = market.get(key)
         card["_detail"] = sub_results
         return card
     return {"raw_output": result_text}

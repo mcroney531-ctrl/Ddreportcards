@@ -248,7 +248,9 @@ Steps:
 4. trade_value_score and trade_value_grade are deterministic: code sets them from
    blend_with_market's market_percentile using the table above. Report them as that table
    gives them; do not choose, adjust or re-grade them (not for our composite, not for the
-   divergence)
+   divergence). Likewise player, position, dynasty_value, trend_30day, hybrid_market_value
+   and market_percentile are taken from the tool results in code — pass
+   compute_proprietary_composite's result to blend_with_market unchanged
 5. Write a short trend note: is the market moving on this player (trend_30day), and does
    our internal view agree or diverge from consensus (the divergence/note from blend_with_market)?
 
@@ -270,28 +272,68 @@ Output format — always return a JSON object with these exact keys:
 
 # ── Agent + runner ────────────────────────────────────────────────────────────
 
-def _capturing_blend(capture: dict):
-    """blend_with_market, recording its deterministic result so run_market_agent
-    can grade from the tool output rather than the model's copy of it."""
-    @functools.wraps(blend_with_market)
-    def wrapped(proprietary_composite: float, player_id: str) -> dict:
-        result = blend_with_market(proprietary_composite, player_id)
-        capture["blend"] = result
+def _capturing_consensus(capture: dict):
+    """get_market_consensus, recording each result by player_id so
+    run_market_agent can take the market facts from the tool output rather
+    than the model's copy of it. Same name, docstring and schema for ADK."""
+    @functools.wraps(get_market_consensus)
+    def wrapped(player_id: str) -> dict:
+        result = get_market_consensus(player_id)
+        capture.setdefault("consensus", {})[str(player_id)] = result
         return result
     return wrapped
 
 
-def _apply_deterministic_grade(result: dict, capture: dict) -> dict:
-    """Overwrite the model-authored market_percentile / trade_value_score /
-    trade_value_grade with the deterministic values. Source of the percentile:
-    the captured blend_with_market result; only if the tool never ran, the
-    model's own market_percentile."""
-    blend = capture.get("blend")
-    percentile = blend["market_percentile"] if blend else result.get("market_percentile")
-    if isinstance(percentile, (int, float)) and not isinstance(percentile, bool):
-        result["market_percentile"] = percentile
-        result["trade_value_score"] = market_score_from_percentile(percentile)
-        result["trade_value_grade"] = market_grade_from_percentile(percentile)
+def _capturing_blend(capture: dict):
+    """blend_with_market, recording each result (and the composite it was
+    given) by player_id. Same name, docstring and schema for ADK."""
+    @functools.wraps(blend_with_market)
+    def wrapped(proprietary_composite: float, player_id: str) -> dict:
+        result = blend_with_market(proprietary_composite, player_id)
+        capture.setdefault("blend", {})[str(player_id)] = {
+            "proprietary_composite": proprietary_composite, "result": result,
+        }
+        return result
+    return wrapped
+
+
+def _apply_deterministic_fields(result: dict, capture: dict, player_id: str, expected_composite: float) -> dict:
+    """Set every tool-backed Market field from the captured tool results.
+
+      get_market_consensus -> player, position, dynasty_value, trend_30day
+      blend_with_market    -> hybrid_market_value, market_percentile
+      code                 -> trade_value_score, trade_value_grade
+    The model keeps only the narrative (trend_note, key_factors, summary).
+
+    Fails with {"error": ...} (the agents' convention) when either tool never
+    ran for this player_id, or when blend_with_market was handed a composite
+    other than the one computed from this run's own inputs. Model-authored
+    market facts are never a fallback.
+    """
+    consensus = (capture.get("consensus") or {}).get(str(player_id))
+    blend = (capture.get("blend") or {}).get(str(player_id))
+    missing = [name for name, got in (("get_market_consensus", consensus), ("blend_with_market", blend)) if not got]
+    if missing:
+        return {"error": f"market evaluation incomplete: {', '.join(missing)} did not run for player_id {player_id}"}
+    if abs(float(blend["proprietary_composite"]) - expected_composite) > 0.05:
+        return {"error": (
+            f"market evaluation rejected: blend_with_market was given proprietary_composite="
+            f"{blend['proprietary_composite']}, but this player's inputs compute {expected_composite}"
+        )}
+
+    blended = blend["result"]
+    in_pool = consensus.get("in_pool", False)
+    percentile = blended["market_percentile"]
+    result.update({
+        "player": consensus.get("name") if in_pool else None,
+        "position": consensus.get("position") if in_pool else None,
+        "dynasty_value": consensus["dynasty_value"],
+        "trend_30day": consensus.get("trend_30day") if in_pool else None,
+        "hybrid_market_value": blended["hybrid_market_value"],
+        "market_percentile": percentile,
+        "trade_value_score": market_score_from_percentile(percentile),
+        "trade_value_grade": market_grade_from_percentile(percentile),
+    })
     return result
 
 
@@ -307,7 +349,7 @@ def build_market_agent(capture: dict | None = None) -> LlmAgent:
         name="market_agent",
         instruction=SYSTEM_PROMPT,
         tools=[
-            get_market_consensus,
+            _capturing_consensus(capture) if capture is not None else get_market_consensus,
             compute_proprietary_composite,
             _capturing_blend(capture) if capture is not None else blend_with_market,
         ],
@@ -317,8 +359,10 @@ def build_market_agent(capture: dict | None = None) -> LlmAgent:
 async def run_market_agent(
     player_id: str, opportunity_score: int, production_score: int, current_health_score: int, aging_risk: str
 ) -> dict:
-    """Run the Market Agent for a given player. Returns parsed JSON output, with
-    market_percentile/trade_value_score/trade_value_grade set deterministically."""
+    """Run the Market Agent for a given player. Returns parsed JSON output with
+    every tool-backed field set from the actual tool results (see
+    _apply_deterministic_fields), or {"error": ...} if those results are
+    missing or don't match this player's inputs."""
     capture: dict = {}
     agent = build_market_agent(capture)
     session_service = InMemorySessionService()
@@ -349,7 +393,10 @@ async def run_market_agent(
 
     json_match = re.search(r'\{.*\}', result_text, re.DOTALL)
     if json_match:
-        return _apply_deterministic_grade(json.loads(json_match.group()), capture)
+        expected = compute_proprietary_composite(
+            opportunity_score, production_score, current_health_score, aging_risk
+        )["proprietary_composite"]
+        return _apply_deterministic_fields(json.loads(json_match.group()), capture, player_id, expected)
     return {"raw_output": result_text}
 
 
