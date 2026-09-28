@@ -1,9 +1,11 @@
 """
 Production Agent — evaluates production/talent only, independent of situation,
 for a ROSTERED dynasty player. Adapted from Scout's rookie production_agent:
-college stats are swapped for current + prior NFL season production via ESPN's
-Core API. The Risk Modifier combines a current-health/availability score (1-5,
-from Sleeper's live injury/practice status + ESPN's team injury feed) with a
+college stats are swapped for the most recently completed NFL regular season
+(the historical production baseline) + the prior completed season via ESPN's
+Core API -- never partial in-progress totals. The Risk Modifier combines a
+current-health/availability score (1-5, from Sleeper's live injury/practice
+status + ESPN's team injury feed) with a
 separately-computed age-curve signal (years_exp/age from Sleeper), since a
 rostered veteran's dynasty risk includes "how much window is left." There is
 no predictive model behind a numeric injury probability, and current
@@ -45,10 +47,22 @@ AGE_CURVES = {
 }
 
 
-def _most_recent_completed_season() -> int:
-    """NFL season year = the calendar year it kicks off in (September)."""
-    today = datetime.date.today()
-    return today.year - 1 if today.month < 9 else today.year
+def _most_recent_completed_season(as_of: datetime.date | None = None) -> int:
+    """The most recently COMPLETED NFL regular season, as of `as_of` (default today).
+
+    An NFL season is named for the calendar year it kicks off in, and its
+    regular season ends in January of the next year. Season N counts as
+    completed from February 1 of N+1:
+      January       -> year - 2   (season year - 1 may still be finishing)
+      February-Dec  -> year - 1   (September kickoff does NOT make the new,
+                                   in-progress season "completed")
+    Deliberately conservative: one season stale for part of January beats
+    ever feeding partial totals to a tool described as completed-season data.
+    (api._current_nfl_season is different on purpose: chat wants the season
+    in progress.)
+    """
+    today = as_of or datetime.date.today()
+    return today.year - 2 if today.month == 1 else today.year - 1
 
 
 # ── ADK tool functions ────────────────────────────────────────────────────────
@@ -104,18 +118,21 @@ def get_current_season_production(espn_athlete_id: str, season: int | None = Non
     """
     Fetch one NFL regular season's production stats from ESPN (rushing/receiving/
     passing/scoring, flattened to {stat_name: value}). season defaults to the
-    most recently completed NFL season.
+    most recently completed NFL regular season -- the historical production
+    baseline, not season-to-date totals for a season still in progress.
     espn_athlete_id: the player's ESPN athlete id
     """
     if not _valid_espn_id(espn_athlete_id):
         return {"error": "no ESPN athlete id on file for this player — likely too deep on the roster to have NFL stats tracked"}
-    season = season or _most_recent_completed_season()
+    if season is None:
+        season = _most_recent_completed_season()
     stats = espn_client.get_season_statistics(str(espn_athlete_id), season)
     return {"espn_id": espn_athlete_id, "season": season, "stats": espn_client.flatten_statistics(stats)}
 
 
 def get_prior_season_production(espn_athlete_id: str) -> dict:
-    """Fetch the season before the most recently completed one, for trend comparison."""
+    """Fetch the completed regular season before the most recently completed one,
+    for trend comparison."""
     if not _valid_espn_id(espn_athlete_id):
         return {"error": "no ESPN athlete id on file for this player — likely too deep on the roster to have NFL stats tracked"}
     season = _most_recent_completed_season() - 1
@@ -224,7 +241,8 @@ SYSTEM_PROMPT = f"""You are the Production Agent for a dynasty fantasy football 
 
 Your job: evaluate a ROSTERED player's on-field PRODUCTION only — completely independent
 of their situation/opportunity (a separate agent handles that). Focus on: NFL production
-volume and efficiency (most recent completed season, with prior-season trend context),
+volume and efficiency (most recently completed regular season as the historical baseline,
+with prior-completed-season trend context — never partial in-progress totals),
 positional value, current health/availability (Current Health Score), and aging risk
 (career-window signal) — two separate components of the Risk Modifier.
 
@@ -232,8 +250,9 @@ positional value, current health/availability (Current Health Score), and aging 
 
 Tools available:
 - lookup_player_info: Basic profile + live injury/practice status from Sleeper, + ESPN athlete id
-- get_current_season_production: Most recently completed NFL season's stats
-- get_prior_season_production: The season before that, for trend comparison
+- get_current_season_production: Most recently completed NFL regular season's stats (the
+  historical baseline; its "season" field says which year — not the season in progress)
+- get_prior_season_production: The completed season before that, for trend comparison
 - get_career_production: Career totals for broader context
 - get_injury_notes: Recent injury/status notes from ESPN's team feed
 - compute_age_curve_signal: Position-specific aging-window risk from age/years_exp
@@ -262,7 +281,9 @@ Key stats to weight for skill positions (field names come from ESPN's flattened 
 - WR/TE: receptions, receivingYards, yardsPerReception, receivingTouchdowns, longReception
 - QB: completionPct, passingYards, yardsPerPassAttempt, passingTouchdowns, interceptions, rushingYards
 
-Output format — always return a JSON object with these exact keys:
+Output format — always return a JSON object with these exact keys. "current_season" is the
+"season" value get_current_season_production returned (the completed baseline season), not the
+season currently being played:
 {{
   "player": "Full Name",
   "position": "RB",
@@ -276,7 +297,7 @@ Output format — always return a JSON object with these exact keys:
     "receptions": 33,
     "receiving_yards": 206
   }},
-  "trend_note": "One sentence comparing current season to prior season.",
+  "trend_note": "One sentence comparing the baseline season to the prior completed season.",
   "risk_modifier": {{
     "current_health_score": 4,
     "injury_notes": "Brief description of any relevant recent injury/status notes",
