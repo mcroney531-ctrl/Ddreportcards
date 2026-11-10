@@ -1,0 +1,130 @@
+{
+  "player": "Devin Singletary",
+  "position": "RB",
+  "team": "NYG",
+  "opportunity_grade": "C-",
+  "opportunity_score": 72,
+  "production_grade": "D+",
+  "production_score": 48,
+  "risk_modifier": {
+    "current_health_score": 5,
+    "injury_notes": "No current injury designation per Sleeper; most recent ESPN note is a standard post-game usage line from Week 10 2025 (21 carries, 31 yards vs. Eagles) — no health concern flagged.",
+    "aging_risk": "high",
+    "career_window_note": "at or past this model's configured RB high aging-risk threshold (29)"
+  },
+  "trade_value_grade": "C+",
+  "trade_value_score": 47,
+  "hybrid_market_value": 938,
+  "dynasty_value": 920,
+  "trend_30day": 805,
+  "key_strengths": [
+    "Confirmed RB1 on NYG depth chart (depth_chart_order: 1) with no elite competition threatening his lead designation",
+    "Fully healthy — current_health_score of 5/5 with no injury designation",
+    "5 rushing TDs in 2025 adds real fantasy floor value in a PPR/superflex context",
+    "Massive 30-day market surge (+805 dynasty value points) creates a rare sell-high window at peak trade price",
+    "Competition room is largely soft outside of Cam Skattebo — the remaining five backfield members are non-factors"
+  ],
+  "key_concerns": [
+    "D+ production: Only 437 rushing yards across 17 games (~25.7 YPG) — a clear committee/depth-back profile, not a true lead back",
+    "Declining efficiency: 3.67 YPC in 2025 and 3.87 YPC in 2024, both well below his 4.34 career average, signaling erosion",
+    "Negligible receiving role: 18 receptions and 151 receiving yards in 2025 severely limits his weekly PPR floor",
+    "High aging risk: At 29 years old with 7 years of NFL experience, his dynasty runway is extremely short",
+    "Cam Skattebo (Grade C, RB26 redraft) is a rising rookie actively capable of siphoning early-down and goal-line work",
+    "NYG team context caps the ceiling regardless of backfield hierarchy — weak OL and uncertain QB situation limit overall volume",
+    "Tyrone Tracy Jr. (currently inactive) could return and further complicate the depth chart",
+    "Touchdown-dependent scoring is unsustainable at his current carry volume — a negative TD regression would crater his weekly value",
+    "2 fumbles lost in 2024 (7 career) add a ball-security risk that could cost him snaps"
+  ],
+  "narrative": "Devin Singletary's report card tells a stark, internally consistent story: modest opportunity in a low-upside offense, weak on-field production that hasn't justified even that limited opportunity, and a career window that is effectively closing at age 29. The one bright signal — a fully healthy body and confirmed RB1 role — is real but fragile, with Cam Skattebo waiting in the wings and an NYG offense that structurally caps backfield upside. The +805 30-day market surge is the most actionable data point on this card: the market is currently pricing in his health and depth-chart standing while discounting his declining efficiency, aging risk, and limited PPR receiving role — a mispricing that creates a textbook sell-high window. In a 12-team superflex PPR dynasty league, Singletary carries zero QB premium and limited upside as a pure RB, making him a prime trade candidate — move him now before the market corrects, Skattebo ascends further, or the touchdown luck regresses.",
+  "_detail": {
+    "situation": {
+      "player": "Devin Singletary",
+      "position": "RB",
+      "team": "NYG",
+      "depth_chart_order": 1,
+      "opportunity_score": 72,
+      "opportunity_grade": "C-",
+      "competition": {
+        "competitor_count": 6,
+        "strongest_competitor_grade": "C",
+        "room_strength": "moderate — a legitimate flex-level competitor (Skattebo) with the rest being replaceable depth",
+        "summary": "Cam Skattebo (RB26 redraft, Grade C) is the meaningful threat — a rookie with dynasty buzz who is active and could siphon early-down or goal-line work. The remaining 5 competitors (Tracy inactive, Desrosiers/Gray/Mizzell/Mafah all Grade F) are essentially non-factors."
+      },
+      "key_factors": [
+        "Confirmed RB1 on the NYG depth chart at depth_chart_order: 1",
+        "Active and healthy — no injury designation",
+        "Veteran presence (7 years exp) in a lead back role",
+        "Competition room is largely soft outside of one C-grade challenger"
+      ],
+      "concerns": [
+        "Cam Skattebo (Grade C, RB26 redraft) is an active, rising rookie who could eat into carries — especially early-down and goal-line snaps",
+        "NYG is a low-upside offense in 2025 — weak OL, uncertain QB situation limits backfield volume ceiling",
+        "Singletary is 29 years old — teams may lean into younger options as the season progresses",
+        "Tyrone Tracy Jr. (Grade F, currently Inactive) could return and complicate the backfield pecking order"
+      ],
+      "summary": "Singletary holds the RB1 role on the Giants' depth chart with no elite competition threatening his lead designation, but Cam Skattebo is a legitimate and active challenger who keeps this from being a truly clear-cut situation. The bigger drag on his opportunity grade is the NYG offense itself — a limited team context that caps backfield volume regardless of who's leading the committee."
+    },
+    "production": {
+      "player": "Devin Singletary",
+      "position": "RB",
+      "espn_athlete_id": "4040761",
+      "current_season": 2025,
+      "key_stats": {
+        "rushing_yards": 437,
+        "rushing_attempts": 119,
+        "yards_per_carry": 3.67,
+        "rushing_tds": 5,
+        "receptions": 18,
+        "receiving_yards": 151,
+        "total_yards_from_scrimmage": 588,
+        "games_played": 17
+      },
+      "trend_note": "Singletary's raw volume (437 rushing yards, 17 games) is nearly identical to his 2024 baseline (437 yards, 15 games), but his efficiency declined slightly from 3.87 YPC in 2024 to 3.67 YPC in 2025, while his touchdown total ticked up from 4 to 5 — a flat-to-marginally-worse profile overall.",
+      "risk_modifier": {
+        "current_health_score": 5,
+        "injury_notes": "No current injury designation per Sleeper; most recent ESPN note is a standard post-game usage line from Week 10 2025 (21 carries, 31 yards vs. Eagles) — no health concern flagged.",
+        "aging_risk": "high",
+        "career_window_note": "at or past this model's configured RB high aging-risk threshold (29)"
+      },
+      "production_score": 48,
+      "production_grade": "D+",
+      "key_factors": [
+        "Only 437 rushing yards across a full 17-game season — sub-26 yards per game rushing — well below RB2 thresholds",
+        "119 rushing attempts across 17 games is a thin workload (~7 carries/game), consistent with a committee or depth role",
+        "3.67 YPC in 2025 and 3.87 YPC in 2024 are both below-average efficiency figures at the position",
+        "Receiving work is minimal — 18 receptions for 151 yards (8.4 YPR) in 2025, offering little pass-game upside",
+        "5 rushing TDs in 2025 is a modest positive, but touchdown reliance on low-volume usage is unsustainable and score-dependent",
+        "Career totals (5,034 rushing yards, 1,159 attempts across 115 games, 4.34 career YPC) show he was a more efficient producer earlier in his career; recent seasons have trended down in both volume and efficiency",
+        "2 fumbles lost in 2024 (and 7 career) add a ball-security concern to the profile"
+      ],
+      "concerns": [
+        "PRODUCTION: Sub-replacement rushing volume — 437 yards/17 games is a clear committee/depth-back profile, not a lead back",
+        "PRODUCTION: Below-average YPC in both recent seasons (3.67 in 2025, 3.87 in 2024) compared to 4.34 career average, suggesting efficiency erosion",
+        "PRODUCTION: Negligible receiving role (18 receptions, 151 yards) limits his weekly fantasy floor significantly",
+        "CURRENT HEALTH: Most recent game note (21 carries for 31 yards vs. Eagles) shows continued inefficiency even when given volume",
+        "AGING RISK: At 29 years old with 7 years of experience, Singletary is at or past the high aging-risk threshold for RBs per this model's configured thresholds"
+      ],
+      "summary": "Devin Singletary has posted back-to-back limited production seasons — identical rushing yardage in 2024 and 2025 (437 yards each) with declining efficiency and minimal pass-catching involvement — firmly placing him in the complementary/depth-back tier of NFL producers. His production profile alone warrants a D+ grade, and his aging risk (age 29, year 7) compounds the dynasty concern for the Market agent to price accordingly."
+    },
+    "market": {
+      "player": "Devin Singletary",
+      "position": "RB",
+      "dynasty_value": 920,
+      "hybrid_market_value": 938,
+      "market_percentile": 47.1,
+      "trade_value_score": 47,
+      "trade_value_grade": "C+",
+      "trend_30day": 805,
+      "trend_note": "Singletary is experiencing a massive positive market surge (+805 over 30 days), and our internal view modestly agrees — we're slightly more bullish than consensus, nudging his hybrid value up from 920 to 938.",
+      "key_factors": [
+        "🔥 Huge 30-day market surge (+805 dynasty value points) signals rapidly rising consensus interest",
+        "✅ Strong opportunity score (72) — Singletary is in a role with real volume/touches",
+        "⚠️ Low production score (48) — he has not yet converted opportunity into elite fantasy output",
+        "🏥 Current health score is 5/5 — fully healthy and available right now",
+        "📉 High aging risk — as a veteran RB, long-term dynasty shelf life is a concern",
+        "📊 C+ trade grade (47th percentile among RBs) — depth/flex-level dynasty trade value"
+      ],
+      "summary": "Devin Singletary is a hot commodity right now with a sky-high 30-day market trend, suggesting a window of peak trade value driven by his current opportunity and health — this looks like a **sell-high** candidate. His high aging risk and modest production scores cap his long-term dynasty ceiling, making now an ideal time to convert his surging market price into a younger or more productive asset."
+    }
+  }
+}

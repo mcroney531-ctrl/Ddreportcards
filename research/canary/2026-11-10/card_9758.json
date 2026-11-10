@@ -1,3 +1,131 @@
 {
-  "detail": "Spend accounting is unavailable, so this request cannot be authorised. Try again shortly."
+  "player": "C.J. Stroud",
+  "position": "QB",
+  "team": "HOU",
+  "opportunity_grade": "A-",
+  "opportunity_score": 91,
+  "production_grade": "B-",
+  "production_score": 82,
+  "risk_modifier": {
+    "current_health_score": 5,
+    "injury_notes": "No injury designation on Sleeper; most recent ESPN note is a 384-yard, 5-TD game recap — no current health concern flagged anywhere.",
+    "aging_risk": "low",
+    "career_window_note": "11+ years before this model's configured QB aging-risk threshold (36)"
+  },
+  "trade_value_grade": "A-",
+  "trade_value_score": 85,
+  "hybrid_market_value": 4351,
+  "dynasty_value": 4313,
+  "trend_30day": 946,
+  "key_strengths": [
+    "Unquestioned QB1 in Houston with zero credible competition — both backups (Davis Mills, Graham Mertz) grade F with no path to the starting role",
+    "Efficiency rebound in 2025: career-best 64.5% completion rate, 7.19 Y/A, and 92.9 passer rating — a clear step forward after the 2024 dip",
+    "19 passing TDs in 14 games projects to a top-12 TD pace over a full season, reinforced by a 95.3 career passer rating across 54 games",
+    "Meaningful rushing contribution (209 yards, 48 attempts) raises his fantasy floor beyond pure passing volume",
+    "Fully healthy with no injury designation — current health score 5/5",
+    "Only 25 years old with 11+ years before the model's aging-risk threshold — maximum dynasty runway",
+    "Market surging hard (+946 over 30 days), sitting QB11 on FantasyCalc at the 85th position percentile overall rank 32 league-wide"
+  ],
+  "key_concerns": [
+    "Missed 3 of 17 games in 2025, slightly deflating volume-based metrics and raising mild availability questions",
+    "2024 QBR of 46.6 was a notable down year — the 2025 rebound is encouraging but consistency floor is not fully proven over multiple seasons",
+    "19 career fumbles across 54 games (2 in 2025, 0 lost) is worth monitoring as a ball-security habit",
+    "Houston's run-heavy tendencies under DeMeco Ryans and a still-developing supporting cast (Tank Dell's health) could cap passing volume ceiling",
+    "No credible backup means any Stroud injury immediately tanks the HOU QB position to near-zero value"
+  ],
+  "narrative": "C.J. Stroud is about as aligned a dynasty asset as you'll find — elite opportunity (A-), strong and rebounding production (B-), a perfect health signal, and a market that's rapidly repricing him upward, all pointing in the same direction. The only real tension in the grades is that the production score (82) lags the opportunity score (91) slightly, a gap explained primarily by missing three games in 2025 and the lingering shadow of a subpar 2024 — neither of which undermines the overall bull case. In a 12-team superflex league where starting two QBs is mandatory, Stroud's superflex premium amplifies his dynasty value considerably: a locked-in QB1 at age 25 with this efficiency profile and a +946 30-day market surge is a clear long-term hold. Unless an offer borders on a dynasty-reshaping haul, there is no compelling reason to sell — and if anything, the window to buy him at a reasonable price may already be closing.",
+  "_detail": {
+    "situation": {
+      "player": "C.J. Stroud",
+      "position": "QB",
+      "team": "HOU",
+      "depth_chart_order": 1,
+      "opportunity_score": 91,
+      "opportunity_grade": "A-",
+      "competition": {
+        "competitor_count": 2,
+        "strongest_competitor_grade": "F",
+        "room_strength": "soft — only replaceable depth around him",
+        "summary": "Davis Mills (redraft rank #66, grade F) and Graham Mertz (not in FantasyCalc's relevant pool, grade F) are the only QBs behind Stroud — both are pure backups with zero realistic path to stealing the starting role."
+      },
+      "key_factors": [
+        "Unquestioned QB1 on the Houston Texans depth chart",
+        "No meaningful competition — both backups grade F with no redraft value",
+        "Trending adds (96K+) signal rising manager interest, consistent with an active/healthy status",
+        "Houston's offense is built around Stroud, with high-volume skill weapons (Tank Dell trending #1 adds at 964K)",
+        "Young, ascending starter entering Year 3 — scheme and role continuity expected"
+      ],
+      "concerns": [
+        "Houston's overall offensive ceiling is still developing — supporting cast health (Tank Dell's return) affects Stroud's volume floor",
+        "No injury designation currently, but QB1s carry inherent injury risk that would instantly elevate worthless backups",
+        "Team winning trajectory and play-calling style (run-heavy tendencies under DeMeco Ryans) could occasionally cap passing volume"
+      ],
+      "summary": "C.J. Stroud is the uncontested starting QB in Houston with zero credible competition behind him — Davis Mills and Graham Mertz are pure emergency insurance, grading F in redraft value. The only opportunity concerns are scheme-driven passing volume and roster health around him, not anything on the depth chart itself."
+    },
+    "production": {
+      "player": "C.J. Stroud",
+      "position": "QB",
+      "espn_athlete_id": "4432577",
+      "current_season": 2025,
+      "key_stats": {
+        "games_played": 14,
+        "passing_yards": 3041,
+        "passing_attempts": 423,
+        "completion_pct": 64.5,
+        "yards_per_attempt": 7.19,
+        "passing_tds": 19,
+        "passer_rating": 92.9,
+        "QBR": 61.52,
+        "rushing_yards": 209,
+        "rushing_attempts": 48,
+        "fumbles_lost": 0
+      },
+      "trend_note": "Stroud bounced back sharply in 2025 — his passer rating jumped from 87.0 to 92.9 and QBR leapt from 46.6 to 61.5 — representing a clear efficiency recovery after a down 2024 campaign, though on fewer attempts across 14 games versus 17.",
+      "risk_modifier": {
+        "current_health_score": 5,
+        "injury_notes": "No injury designation on Sleeper; most recent ESPN note is a 384-yard, 5-TD game recap — no current health concern flagged anywhere.",
+        "aging_risk": "low",
+        "career_window_note": "11+ years before this model's configured QB aging-risk threshold (36)"
+      },
+      "production_score": 82,
+      "production_grade": "B-",
+      "key_factors": [
+        "Strong efficiency rebound in 2025: 64.5% completion rate, 7.19 Y/A, 92.9 passer rating — all career-best marks",
+        "19 passing TDs in 14 games projects to a top-12 QB TD pace over a full season",
+        "QBR improved dramatically from 46.6 (2024) to 61.52 (2025), signaling real production quality gains",
+        "Solid rushing contribution (209 yards, 48 attempts) adds a floor-raising dimension",
+        "Career passer rating of 95.3 across 54 games confirms sustained efficiency — not a one-year fluke",
+        "Volume is mid-tier due to 14 games played (3 missed), keeping the score from the elite tier"
+      ],
+      "concerns": [
+        "Played only 14 of 17 games in 2025 — reduced sample slightly deflates volume-based metrics",
+        "2024 was a noticeable down year by QBR (46.6) and overall efficiency — raises questions about consistency floor",
+        "Fumble history: 19 career fumbles across 54 games, including 2 in 2025 (0 lost), is worth monitoring",
+        "Current health score 5 — no current concern",
+        "Aging risk low — 25 years old with a lengthy career window ahead"
+      ],
+      "summary": "C.J. Stroud is a legitimate top-12 QB producer who rebounded convincingly in 2025 with improved efficiency across completion rate, Y/A, and passer rating after a sluggish 2024. His production profile shows an ascending young franchise quarterback with a strong career baseline, though missing three games in 2025 and the 2024 dip in QBR are worth noting as consistency questions."
+    },
+    "market": {
+      "player": "C.J. Stroud",
+      "position": "QB",
+      "dynasty_value": 4313,
+      "hybrid_market_value": 4351,
+      "market_percentile": 85.3,
+      "trade_value_score": 85,
+      "trade_value_grade": "A-",
+      "trend_30day": 946,
+      "trend_note": "C.J. Stroud is surging hard on the dynasty market (+946 over 30 days), and our internal model fully agrees — with an 88.8 composite driven by elite opportunity and strong production, there's no divergence to flag here.",
+      "key_factors": [
+        "Elite opportunity score (91) — top-tier target share and usage profile at QB",
+        "Strong production score (82) — translating opportunity into real fantasy output",
+        "Perfect current health score (5/5) — fully available with no current health concerns",
+        "Low aging risk — a young QB with a long dynasty runway ahead",
+        "QB11 by position rank on FantasyCalc, sitting at overall rank 32 league-wide",
+        "High redraft value (3623) confirms real-world relevance, not just dynasty speculation",
+        "Market surging +946 over 30 days — growing consensus buy-in"
+      ],
+      "summary": "C.J. Stroud is a clear dynasty asset at QB, ranking in the 85th percentile at the position with a market that's rapidly gaining confidence in him. Our internal view fully corroborates the market — this is a hold-tight asset, and buying now may still be reasonable given his age, opportunity, and upward trajectory."
+    }
+  }
 }

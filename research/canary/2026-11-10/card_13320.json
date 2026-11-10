@@ -1,0 +1,130 @@
+{
+  "player": "Zachariah Branch",
+  "position": "WR",
+  "team": "ATL",
+  "opportunity_grade": "F",
+  "opportunity_score": 14,
+  "production_grade": "F",
+  "production_score": 28,
+  "risk_modifier": {
+    "current_health_score": 1,
+    "injury_notes": "Branch is currently listed as Out per both Sleeper (injury_status: Out) and ESPN's team feed, with the most recent note confirming 'out' as of early November 2026.",
+    "aging_risk": "low",
+    "career_window_note": "8+ years before this model's configured WR aging-risk threshold (30)"
+  },
+  "trade_value_grade": "C",
+  "trade_value_score": 43,
+  "hybrid_market_value": 617,
+  "dynasty_value": 659,
+  "trend_30day": -326,
+  "key_strengths": [
+    "Elite youth (22 years old) — maximum remaining career window for development",
+    "Low aging risk means no looming cliff; time is on his side if the opportunity ever opens",
+    "Legitimate return-game ability (25.7 YPC on kick returns, 8 punt returns) keeps him on active rosters and provides a floor of NFL relevance",
+    "Drake London and Jahan Dotson are the only real blockers of note; the rest of the depth chart is placeholder-level competition (all Grade-F)"
+  ],
+  "key_concerns": [
+    "Currently listed as OUT — health score of 1/5 is as low as it goes; zero near-term availability",
+    "Buried at WR8 on the depth chart with no clear path to meaningful offensive touches even when healthy",
+    "Drake London (Grade-A, redraft WR10) and Jahan Dotson (WR2) firmly cap the target ceiling for anyone behind them in Atlanta",
+    "Just 10 career receptions for 64 yards (6.4 YPR, 0 TDs) across 8 games — production record is functionally empty",
+    "2 career fumbles lost on a minimal touch count is a troubling efficiency marker",
+    "30-day dynasty market trend of -326 points is one of the steepest sell signals possible — market confidence is collapsing",
+    "Our proprietary model is even more bearish than consensus (hybrid: 617 vs. market: 659), suggesting further downside"
+  ],
+  "narrative": "Zachariah Branch is a classic 'name on a roster' dynasty stash right now — every signal across all three evaluation pillars is flashing red simultaneously. His F grades in both Opportunity and Production tell a consistent, bleak story: he is injured, buried on a depth chart anchored by an elite WR1 in Drake London, and has yet to demonstrate any NFL-level receiving viability across 8 career games. The one saving grace is age — at 22, he has time to develop — but that theoretical upside is being rapidly discounted by the market, which has shed 326 dynasty points in just 30 days. If you can find a roster-desperate manager willing to buy the athleticism narrative, this is a sell: the gap between his speculative ceiling and his current on-field reality is enormous, and there is no realistic near-term catalyst to close it.",
+  "_detail": {
+    "situation": {
+      "player": "Zachariah Branch",
+      "position": "WR",
+      "team": "ATL",
+      "depth_chart_order": 8,
+      "opportunity_score": 14,
+      "opportunity_grade": "F",
+      "competition": {
+        "competitor_count": 10,
+        "strongest_competitor_grade": "A",
+        "room_strength": "strong — Drake London is an entrenched WR1 (redraft WR10), and Branch sits 8th on the depth chart behind multiple active competitors",
+        "summary": "1 Grade-A competitor (Drake London, redraft WR10) blocks the top of the room; Jahan Dotson (WR110 redraft) holds WR2 duties; 8 additional Grade-F bodies still physically occupy depth chart slots 3–7 above Branch."
+      },
+      "key_factors": [
+        "Active roster status keeps a path technically alive",
+        "Young (22) rookie with upside — the only non-F competition concern is Drake London at the top",
+        "Atlanta's offense runs through London at WR"
+      ],
+      "concerns": [
+        "Currently listed as OUT (injury) — no immediate role",
+        "Depth chart order of 8 — buried behind 5 other active WRs on the depth chart",
+        "Drake London is a true WR1 (Grade A) consuming the lion's share of Atlanta targets",
+        "Jahan Dotson holds the WR2 slot — another layer of meaningful blocking",
+        "Even in a healthy scenario, Branch has no clear path to meaningful redraft touches in the near term",
+        "Zero years of NFL experience (rookie) in a deep, competitive room"
+      ],
+      "summary": "Zachariah Branch sits 8th on Atlanta's WR depth chart while currently listed as OUT, with Drake London (elite Grade-A WR1) and Jahan Dotson firmly ahead of him — there is simply no clear path to meaningful fantasy touches right now. His opportunity grade is at the floor of the scale; this is a pure stash in dynasty with zero redraft value until the depth chart situation changes dramatically."
+    },
+    "production": {
+      "player": "Zachariah Branch",
+      "position": "WR",
+      "espn_athlete_id": "4870612",
+      "current_season": 2025,
+      "key_stats": {
+        "receptions": 10,
+        "receiving_yards": 64,
+        "yards_per_reception": 6.4,
+        "receiving_tds": 0,
+        "receiving_targets": 12,
+        "games_played": 8,
+        "kick_returns": 14,
+        "kick_return_yards": 360,
+        "yards_per_kick_return": 25.7,
+        "punt_returns": 8,
+        "punt_return_yards": 83
+      },
+      "trend_note": "Both the 2024 and 2025 completed seasons returned empty stat lines, with all meaningful production evidence coming from career totals across just 8 games — no discernible upward trend has yet been established.",
+      "risk_modifier": {
+        "current_health_score": 1,
+        "injury_notes": "Branch is currently listed as Out per both Sleeper (injury_status: Out) and ESPN's team feed, with the most recent note confirming 'out' as of early November 2026.",
+        "aging_risk": "low",
+        "career_window_note": "8+ years before this model's configured WR aging-risk threshold (30)"
+      },
+      "production_score": 28,
+      "production_grade": "F",
+      "key_factors": [
+        "Extremely limited career sample — just 8 games played and no measurable season-level production line from either the current or prior completed seasons",
+        "10 career receptions for 64 yards (6.4 YPR) with zero receiving touchdowns represents near-replacement-level receiving output",
+        "Primary NFL production value to date has been as a returner (14 kick returns, 360 yards, 25.7 avg; 8 punt returns, 83 yards), not as a receiver",
+        "Minimal offensive target share and route-running production on record",
+        "No games played in the most recently completed regular season baseline"
+      ],
+      "concerns": [
+        "Currently listed as Out — health score of 1 reflects a severe present availability concern",
+        "Production record is too thin to grade with confidence at the WR position; insufficient evidence of NFL receiving viability",
+        "Very low yards-per-reception average (6.4) across a small career sample raises efficiency concerns",
+        "2 career fumbles lost is a negative efficiency marker for a player with so few offensive touches",
+        "Situation/opportunity agent should assess whether a path to WR targets exists beyond special teams"
+      ],
+      "summary": "Zachariah Branch has yet to establish any meaningful receiving production at the NFL level, with just 10 career catches for 64 yards across 8 games and a current 'Out' designation severely limiting his near-term availability. His dynasty value at this stage is entirely speculative, resting on athleticism and return-game flashes rather than demonstrated receiving production — earning an F grade on the production record alone."
+    },
+    "market": {
+      "player": "Zachariah Branch",
+      "position": "WR",
+      "dynasty_value": 659,
+      "hybrid_market_value": 617,
+      "market_percentile": 43.2,
+      "trade_value_score": 43,
+      "trade_value_grade": "C",
+      "trend_30day": -326,
+      "trend_note": "Branch has seen a steep -326 point market drop over the past 30 days, and our internal view agrees — we're meaningfully more bearish than the consensus, nudging his hybrid value down from 659 to 617.",
+      "key_factors": [
+        "Severely limited opportunity (score: 14/100) — minimal target share or usage in the current offense",
+        "Weak recent production (score: 28/100) — not translating what little opportunity he gets into fantasy output",
+        "Current health score of 1/5 signals active availability concerns, dragging down the composite significantly",
+        "Aging risk is low, so long-term upside ceiling remains theoretically intact for a young player",
+        "Market percentile of 43.2 places him as a low-end WR depth piece, not a reliable starter",
+        "Redraft value of 0 confirms no immediate real-team relevance, purely a speculative dynasty hold",
+        "30-day trend of -326 is a dramatic sell signal — market confidence is eroding quickly"
+      ],
+      "summary": "Zachariah Branch is a speculative dynasty flier with almost no current fantasy relevance — his opportunity, production, and health signals are all flashing red right now. Unless his situation improves dramatically, this is a sell-high moment if you can find a buyer, or a deep-stash hold only for the most patient rebuilding rosters."
+    }
+  }
+}

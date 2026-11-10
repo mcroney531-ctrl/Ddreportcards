@@ -1,1 +1,3 @@
-9758	C.J. Stroud	HTTP 503	error={"detail":"Spend accounting is unavailable, so this request cannot be authorised. Try again shortly."}	duration=0.1s	spent_micro_delta=0
+9758	C.J. Stroud	HTTP 200	error=none	duration=97.4s	spent_micro_delta=206520
+6130	Devin Singletary	HTTP 200	error=none	duration=87.2s	spent_micro_delta=197745
+13320	Zachariah Branch	HTTP 200	error=none	duration=79.4s	spent_micro_delta=177882
