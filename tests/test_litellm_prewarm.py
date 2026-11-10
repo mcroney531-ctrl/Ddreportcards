@@ -67,7 +67,14 @@ class PrewarmDoesNotTouchAnthropicOrBudgetTest(unittest.TestCase):
 
 class HealthEndpointsUnchangedByPrewarmTest(unittest.TestCase):
     def test_health_and_health_deep_still_respond_normally_after_startup(self):
-        with mock.patch("google.adk.models.lite_llm._ensure_litellm_imported"):
+        # A working (in-memory) budget store: since Stage 3F, /health/deep
+        # answers 503 when spend accounting is unconfigured, as it is in a
+        # bare test environment. See test_health_deep_semantics.py.
+        import budget
+
+        with mock.patch("google.adk.models.lite_llm._ensure_litellm_imported"), \
+             mock.patch.object(budget, "BACKEND", "memory"), \
+             mock.patch.object(budget, "store", return_value=budget.MemoryBudgetStore()):
             with TestClient(api.app) as client:
                 health = client.get("/health")
                 self.assertEqual(health.status_code, 200)

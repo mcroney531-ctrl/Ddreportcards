@@ -388,6 +388,38 @@ def record_actual(model: str, input_tokens: int, output_tokens: int,
     return store().settle(day_key(now), usage_cost_micro(model, input_tokens, output_tokens))
 
 
+# Read by touch_store() and never written: a dedicated key, so the keepalive
+# can't collide with a day's spend total.
+KEEPALIVE_KEY = f"{KEY_PREFIX}:keepalive"
+
+
+def touch_store() -> bool:
+    """One read-only request to the durable store, so Upstash doesn't count
+    the database as inactive and delete it. A quiet stretch with no chat or
+    report traffic otherwise means zero Redis requests (/health never touches
+    the store), which is how the original database was deleted.
+
+    A GET of KEEPALIVE_KEY only: never reserve/settle, so spend totals can't
+    change. Logs failures by exception class only (the message can carry the
+    Upstash endpoint) and never raises: the keepalive must not take the
+    service down. Returns whether the store answered (memory store: no-op).
+    """
+    try:
+        s = store()
+    except Exception as exc:  # noqa: BLE001 — a keepalive must never raise
+        log.warning("budget_keepalive_failed store_unavailable error=%s", type(exc).__name__)
+        return False
+    if not s.durable:
+        return True
+    try:
+        s.get(KEEPALIVE_KEY)
+    except Exception as exc:  # noqa: BLE001
+        log.warning("budget_keepalive_failed unreachable error=%s", type(exc).__name__)
+        return False
+    log.info("budget_keepalive_ok")
+    return True
+
+
 def has_room(now: datetime.datetime | None = None) -> bool:
     """Cheap 'is there anything left today' check for paths that cannot reserve."""
     return store().get(day_key(now)) < DAILY_LIMIT_MICRO

@@ -42,6 +42,7 @@ load_dotenv()
 from anthropic import Anthropic
 from fastapi import FastAPI, HTTPException, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
 log = logging.getLogger("gm.api")
@@ -156,10 +157,31 @@ async def _prewarm_litellm() -> None:
     )
 
 
+# Upstash deletes a database after a period with no requests (paid plans:
+# about three months). 30 days leaves a 3x margin, and the loop also touches
+# once at every startup, so each deploy or restart counts too. It depends on
+# the process running: the Netlify keepalive polls /health every 5 minutes,
+# which keeps the instance up, but /health itself deliberately never touches
+# the store.
+BUDGET_KEEPALIVE_INTERVAL_SECONDS = 30 * 24 * 3600
+
+
+async def _budget_keepalive_loop() -> None:
+    """Touch the spend store now, then every BUDGET_KEEPALIVE_INTERVAL_SECONDS.
+    budget.touch_store() is one read-only GET and never raises."""
+    while True:
+        await asyncio.to_thread(budget.touch_store)
+        await asyncio.sleep(BUDGET_KEEPALIVE_INTERVAL_SECONDS)
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     await _prewarm_litellm()
-    yield
+    keepalive = asyncio.create_task(_budget_keepalive_loop())
+    try:
+        yield
+    finally:
+        keepalive.cancel()
 
 
 app = FastAPI(title="Dynasty Report Cards API", version="2.0", lifespan=lifespan)
@@ -193,15 +215,26 @@ def health() -> dict:
 
 
 @app.get("/health/deep")
-def health_deep() -> dict:
-    """The rich health payload /health used to return. Not polled by
-    anything — fetched manually, or by a deploy check, when the budget
-    store's reachability or a missing control actually needs verifying."""
-    return {
+def health_deep():
+    """Control-plane check: is spend accounting working? Not polled by
+    Render (that's /health) — fetched manually, by the smoke script, or by a
+    deploy check.
+
+    Spend accounting gates every billable request (the report and chat
+    guards fail closed without it), so if the store can't be built or
+    reached this answers 503 "degraded", not 200 "ok". The diagnostic body
+    (chat_budget + warnings) is returned either way. Other warnings, such as
+    an unset GM_CHAT_SECRET, are reported but don't change the status."""
+    budget_status = chat_guard.budget_status()
+    body = {
         "status": "ok",
-        "chat_budget": chat_guard.budget_status(),
+        "chat_budget": budget_status,
         "warnings": chat_guard.config_warnings(),
     }
+    if budget_status.get("configured") is not True or budget_status.get("reachable") is not True:
+        body["status"] = "degraded"
+        return JSONResponse(status_code=503, content=body)
+    return body
 
 
 @app.get("/league")

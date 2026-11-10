@@ -72,7 +72,11 @@ class HealthDeepPreservesRichPayloadTest(unittest.TestCase):
         })
 
     def test_health_deep_surfaces_a_config_warning(self):
-        with mock.patch.object(chat_guard, "budget_status", return_value={}), \
+        # A reachable store, so only the warning differs. (Since Stage 3F an
+        # empty or unreachable budget status is a 503; see
+        # test_health_deep_semantics.py.)
+        reachable = {"configured": True, "reachable": True}
+        with mock.patch.object(chat_guard, "budget_status", return_value=reachable), \
              mock.patch.object(
                  chat_guard, "config_warnings",
                  return_value=["GM_CHAT_SECRET is not set — /chat accepts unauthenticated requests."],
@@ -97,7 +101,9 @@ class HealthDeepPreservesRichPayloadTest(unittest.TestCase):
         with mock.patch.object(budget, "store", return_value=_UnreachableStore()):
             resp = self.client.get("/health/deep")
 
-        self.assertEqual(resp.status_code, 200)
+        # Stage 3F: an unreachable store is 503 "degraded", no longer 200 "ok".
+        self.assertEqual(resp.status_code, 503)
+        self.assertEqual(resp.json()["status"], "degraded")
         body = resp.json()
         self.assertFalse(body["chat_budget"]["reachable"])
         self.assertIn(
