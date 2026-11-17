@@ -29,25 +29,6 @@ from agents.usage import (
 
 from data import sleeper_client, fantasycalc_client
 
-# ── Competition grade tiers (12-team superflex calibration) ───────────────────
-
-GRADE_TIERS = {
-    "QB": [(12, "A"), (20, "B"), (28, "C"), (36, "D")],
-    "RB": [(12, "A"), (24, "B"), (36, "C"), (48, "D")],
-    "WR": [(12, "A"), (24, "B"), (36, "C"), (54, "D")],
-    "TE": [(6, "A"), (12, "B"), (18, "C"), (24, "D")],
-}
-
-
-def _value_grade(position: str, redraft_position_rank: int | None) -> str:
-    if redraft_position_rank is None:
-        return "F"
-    for thresh, grade in GRADE_TIERS.get(position, []):
-        if redraft_position_rank <= thresh:
-            return grade
-    return "F"
-
-
 # ── ADK tool functions ────────────────────────────────────────────────────────
 
 def lookup_player_situation(player_id: str) -> dict:
@@ -123,7 +104,9 @@ def assess_position_competition(team: str, position: str, exclude_player_id: str
             continue
         fc = fc_by_sleeper.get(pid)
         if fc:
-            grade = _value_grade(position, fc.get("redraftPositionRank"))
+            # Grade policy has one owner: the canonical FantasyCalc tiers,
+            # reached through DD's facade (no local copy to drift).
+            grade = fantasycalc_client.value_grade(position, fc.get("redraftPositionRank"))
             competitors.append({
                 "name": p.get("full_name"),
                 "years_exp": p.get("years_exp"),
