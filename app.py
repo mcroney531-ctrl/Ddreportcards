@@ -20,8 +20,11 @@ st.set_page_config(
 
 
 def _init_secrets():
-    """Sync Streamlit Cloud secrets into os.environ (no-op locally, .env already loaded)."""
-    for key in ["ANTHROPIC_API_KEY", "GOOGLE_API_KEY", "SLEEPER_LEAGUE_ID", "ROSTER_OWNER_ID"]:
+    """Sync Streamlit Cloud secrets into os.environ (no-op locally, .env already loaded).
+
+    Only real secrets. League identity is not configuration of this deployment:
+    it comes from config/dynasty_config.py, the same source api.py uses."""
+    for key in ["ANTHROPIC_API_KEY", "GOOGLE_API_KEY"]:
         try:
             val = str(st.secrets[key]).strip()
             if val:
@@ -32,13 +35,14 @@ def _init_secrets():
 
 _init_secrets()
 
+from config.dynasty_config import LEAGUE
 from data import sleeper_client, trade_history
 from agents.synthesis_agent import run_synthesis_agent
 from agents.roster_agent import run_roster_agent
 from agents.trade_agent import run_trade_agent
 
-LEAGUE_ID = os.getenv("SLEEPER_LEAGUE_ID")
-OWNER = os.getenv("ROSTER_OWNER_ID", "TitansTrev55")
+LEAGUE_ID = LEAGUE["league_id"]
+OWNER = LEAGUE["my_display_name"]
 
 GRADE_COLORS = {"A": "#3fb950", "B": "#3b82f6", "C": "#e8b84b", "D": "#e3873c", "F": "#f85149"}
 

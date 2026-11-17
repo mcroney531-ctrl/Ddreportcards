@@ -1,13 +1,18 @@
-"""Ddreportcards' app-level league metadata for Dynasty Daddies.
+"""Ddreportcards' canonical league profile for Dynasty Daddies.
 
-Deployment identity and league facts this app uses directly (e.g. league_id
-and my_display_name in api.py, and the /league endpoint). GM Command keeps
-its own mirror of these values in dynasty_config.json.
+The one source of this app's deployment identity (league_id, league and team
+names, the owner's Sleeper display name) and of verified league facts. Both
+api.py (every Sleeper call, /league, the chat get_league_info tool) and the
+Streamlit app.py read it; neither reads identity from the environment.
 
-FantasyCalc provider-query defaults are NOT sourced from here: they are
-owned by the shared package, in dynasty_core.settings. Some values overlap
-today (num_teams, num_qbs, ppr); that duplication is a known, deliberately
-deferred item.
+GM Command's dynasty_config.json is a checked mirror of this profile:
+  python scripts/check_league_profile.py --gm-config ../gm-command/dynasty_config.json
+
+num_teams / num_qbs / ppr / is_dynasty are facts about the league.
+dynasty_core.settings holds numerically identical FantasyCalc *query defaults*,
+chosen to price this league. They mean different things, so neither is derived
+from the other; tests/test_league_identity.py asserts they agree, and a
+divergence means FantasyCalc is being queried for the wrong format.
 Verified against Sleeper API 2026-07-04.
 """
 

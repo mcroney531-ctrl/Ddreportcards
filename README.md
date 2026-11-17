@@ -4,13 +4,15 @@ Roster report card agent for a 12-team superflex PPR dynasty league. Grades ever
 player on a roster (Opportunity, Production, Risk, Trade Value), rolls those grades
 into an overall roster grade, and flags sell candidates for the trade section.
 
-Phase 1: single team (owner `BCNH`, team "Pain"). Expands to the full league later.
+Single team: league identity (league id, team "The Psych Ward", owner
+`TitansTrev55`) comes from `config/dynasty_config.py`, the one source both the
+FastAPI service and the Streamlit app read. It is not set through the environment.
 
 ## Setup
 
 ```
 pip install -r requirements.txt
-cp .env.example .env   # fill in ANTHROPIC_API_KEY, GOOGLE_API_KEY, SLEEPER_LEAGUE_ID
+cp .env.example .env   # fill in ANTHROPIC_API_KEY, GOOGLE_API_KEY
 streamlit run app.py
 ```
 
