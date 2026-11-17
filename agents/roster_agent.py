@@ -10,6 +10,8 @@ Outputs: overall letter grade, starter quality score, positional breakdown, flag
 """
 
 import os, sys, json, re
+from collections import Counter
+from dataclasses import dataclass
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 
 from dotenv import load_dotenv
@@ -21,6 +23,7 @@ from google.adk.runners import Runner
 from google.adk.sessions import InMemorySessionService
 from google.genai import types as genai_types
 
+from config.dynasty_config import ROSTER_POSITIONS
 from agents.usage import (
     AGENT_MAX_OUTPUT_TOKENS,
     check_budget_before_model,
@@ -29,9 +32,14 @@ from agents.usage import (
 )
 
 # League format: 12-team, superflex (2 QB starts), half-PPR dynasty.
-BASE_STARTER_SLOTS = {"QB": 1, "RB": 2, "WR": 2, "TE": 1}
-FLEX_SLOTS = 2       # RB/WR/TE eligible
-SF_SLOTS = 1          # QB/RB/WR/TE eligible (superflex)
+#
+# The lineup is not owned here. It is derived, when grading runs, from
+# config/dynasty_config.py ROSTER_POSITIONS (a verified Sleeper snapshot):
+# today QB1 RB2 WR3 TE1 + FLEX1 (RB/WR/TE) + SF1 (any of QB/RB/WR/TE), plus K.
+GRADED_BASE_POSITIONS = ("QB", "RB", "WR", "TE")
+_SLEEPER_SLOT_LABELS = {"SUPER_FLEX": "SF"}      # Sleeper spelling -> internal label
+UNGRADED_STARTER_SLOTS = frozenset({"K"})        # real starters with no DD player card
+NON_STARTER_SLOTS = frozenset({"BN", "TAXI", "IR"})
 
 # Superflex positional value multiplier — QBs get a real premium when
 # competing for the SF slot, mirroring Scout's draft-side POSITION_VALUE.
@@ -42,12 +50,66 @@ QUALITY_WEIGHTS = {"opportunity": 0.30, "production": 0.40, "trade_value": 0.30}
 # Below this quality_score, a player isn't a real dynasty contributor —
 # used for "thin at position" flags.
 CONTRIBUTOR_THRESHOLD = 50
-MIN_CONTRIBUTORS = {"QB": 1, "RB": 2, "WR": 2, "TE": 1}
 
 LETTER_GRADE_TABLE = [
     (97, "A+"), (93, "A"), (90, "A-"), (87, "B+"), (83, "B"), (80, "B-"),
     (77, "C+"), (73, "C"), (70, "C-"), (67, "D+"), (63, "D"), (60, "D-"), (0, "F"),
 ]
+
+
+class UnsupportedRosterSlot(ValueError):
+    """ROSTER_POSITIONS contains a slot type the Roster Agent can't grade."""
+
+
+@dataclass(frozen=True)
+class StarterPolicy:
+    """Starter allocation derived from the league's roster positions.
+
+    base / flex / sf are GRADED starters. ungraded holds real lineup starters
+    DD can't grade (K: no player cards for kickers), so lineup_starters and
+    graded_starters differ: 10 vs 9 for this league.
+    """
+    base: dict
+    flex: int
+    sf: int
+    ungraded: dict
+
+    @property
+    def graded_starters(self) -> int:
+        return sum(self.base.values()) + self.flex + self.sf
+
+    @property
+    def lineup_starters(self) -> int:
+        return self.graded_starters + sum(self.ungraded.values())
+
+    @property
+    def min_contributors(self) -> dict:
+        # "Not thin" at a position means enough real contributors to fill its
+        # required starting slots.
+        return dict(self.base)
+
+
+def starter_policy(roster_positions=None) -> StarterPolicy:
+    """Derive the starter allocation from roster positions (default: the
+    verified ROSTER_POSITIONS). An unknown slot type raises
+    UnsupportedRosterSlot here, when roster grading runs, rather than at
+    import: a future lineup change can't silently grade the wrong structure,
+    and it can't break unrelated DD features either."""
+    positions = ROSTER_POSITIONS if roster_positions is None else roster_positions
+    counts = Counter(_SLEEPER_SLOT_LABELS.get(slot, slot) for slot in positions)
+    known = set(GRADED_BASE_POSITIONS) | {"FLEX", "SF"} | UNGRADED_STARTER_SLOTS | NON_STARTER_SLOTS
+    unknown = sorted(set(counts) - known)
+    if unknown:
+        raise UnsupportedRosterSlot(
+            f"roster positions include {', '.join(unknown)}, which the Roster Agent can't grade; "
+            f"update agents/roster_agent.py before grading this lineup"
+        )
+    return StarterPolicy(
+        base={pos: counts.get(pos, 0) for pos in GRADED_BASE_POSITIONS},
+        flex=counts.get("FLEX", 0),
+        sf=counts.get("SF", 0),
+        ungraded={slot: counts[slot] for slot in sorted(UNGRADED_STARTER_SLOTS) if counts.get(slot)},
+    )
 
 
 def _letter_grade(score: float) -> str:
@@ -76,14 +138,18 @@ def compute_roster_grade(player_cards_json: str) -> dict:
     produced by the Synthesis Agent — each with position, opportunity_score,
     production_score, trade_value_score, player name).
 
-    Assigns starters by quality (not raw headcount): base position slots first
-    (QB1/RB2/WR2/TE1), then FLEX (best remaining RB/WR/TE), then the superflex
-    SF slot (best remaining player at ANY position, with a QB value premium
-    applied since QBs carry real superflex scarcity value). Everyone else is
-    bench. Overall grade is the average quality_score across all starters.
+    Assigns starters by quality (not raw headcount), using the lineup derived
+    from the verified ROSTER_POSITIONS (starter_policy): base position slots
+    first (QB1/RB2/WR3/TE1 today), then FLEX (best remaining RB/WR/TE), then the
+    superflex SF slot (best remaining player at ANY position, with a QB value
+    premium applied since QBs carry real superflex scarcity value). Everyone
+    else is bench. Overall grade is the average quality_score across the GRADED
+    starters: 9 of the league's 10 lineup starters, because K has no player
+    card. "starters" lists only those graded starters.
 
     player_cards_json: JSON-encoded list of player card dicts
     """
+    policy = starter_policy()
     cards = json.loads(player_cards_json)
     for c in cards:
         c["quality_score"] = round(_quality_score(c), 1)
@@ -103,7 +169,7 @@ def compute_roster_grade(player_cards_json: str) -> dict:
         return c.get("player") or c.get("player_id") or str(id(c))
 
     # 1. Base position slots
-    for pos, slots in BASE_STARTER_SLOTS.items():
+    for pos, slots in policy.base.items():
         for c in by_position[pos][:slots]:
             starters.append({**c, "starter_slot": pos})
             used_ids.add(_player_key(c))
@@ -113,14 +179,14 @@ def compute_roster_grade(player_cards_json: str) -> dict:
         c for pos in ("RB", "WR", "TE") for c in by_position[pos] if _player_key(c) not in used_ids
     ]
     flex_pool.sort(key=lambda c: c["quality_score"], reverse=True)
-    for c in flex_pool[:FLEX_SLOTS]:
+    for c in flex_pool[:policy.flex]:
         starters.append({**c, "starter_slot": "FLEX"})
         used_ids.add(_player_key(c))
 
     # 3. Superflex SF slot — best remaining at ANY position, QB premium applied
     sf_pool = [c for players in by_position.values() for c in players if _player_key(c) not in used_ids]
     sf_pool.sort(key=lambda c: c["quality_score"] * POSITION_VALUE.get(c.get("position"), 1.0), reverse=True)
-    for c in sf_pool[:SF_SLOTS]:
+    for c in sf_pool[:policy.sf]:
         starters.append({**c, "starter_slot": "SF"})
         used_ids.add(_player_key(c))
 
@@ -141,7 +207,7 @@ def compute_roster_grade(player_cards_json: str) -> dict:
             "avg_starter_quality": avg_starter_quality,
             "top_players": [{"name": p.get("player"), "quality_score": p["quality_score"]} for p in players[:3]],
         }
-        if len(contributors) < MIN_CONTRIBUTORS.get(pos, 1):
+        if len(contributors) < policy.min_contributors.get(pos, 1):
             flags.append(
                 f"thin at {pos} — only {len(contributors)} real contributor(s) "
                 f"(quality_score >= {CONTRIBUTOR_THRESHOLD}) on the roster"

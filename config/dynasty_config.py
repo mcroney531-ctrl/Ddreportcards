@@ -31,3 +31,20 @@ LEAGUE = {
     "taxi_slots": 4,
     "reserve_slots": 4,         # IR slots
 }
+
+# The league's lineup: Sleeper's roster_positions for this league, stored
+# verbatim. A VERIFIED SNAPSHOT (fetched live from
+# api.sleeper.app/v1/league/1312201057664786432 on 2026-11-17), not a live
+# setting: nothing re-reads Sleeper, so if the league changes its lineup this
+# tuple must be re-verified and updated by hand.
+#
+# 10 lineup starters (QB, RB x2, WR x3, TE, FLEX, SUPER_FLEX, K) + 14 bench,
+# i.e. LEAGUE["active_roster_size"]. The Roster Agent grades 9 of the 10: K is
+# a real starter but DD builds no player cards for kickers.
+#
+# Kept outside LEAGUE on purpose: /league and GM Command's mirror of LEAGUE are
+# unchanged by it.
+ROSTER_POSITIONS = (
+    "QB", "RB", "RB", "WR", "WR", "WR", "TE", "FLEX", "SUPER_FLEX", "K",
+    "BN", "BN", "BN", "BN", "BN", "BN", "BN", "BN", "BN", "BN", "BN", "BN", "BN", "BN",
+)
