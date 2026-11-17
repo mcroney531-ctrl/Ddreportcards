@@ -1,5 +1,5 @@
 """
-Roster Agent — aggregates every player card on BCNH's roster into one overall
+Roster Agent — aggregates every player card on the user's roster into one overall
 roster grade. Reuses Scout's quality-weighted philosophy: grade starters by
 quality, not headcount, apply the superflex QB premium when filling the SF
 slot, and flag positional thinness deterministically. The LLM's job is
@@ -28,7 +28,7 @@ from agents.usage import (
     record_model_usage,
 )
 
-# League format: 12-team, superflex (2 QB starts), PPR dynasty.
+# League format: 12-team, superflex (2 QB starts), half-PPR dynasty.
 BASE_STARTER_SLOTS = {"QB": 1, "RB": 2, "WR": 2, "TE": 1}
 FLEX_SLOTS = 2       # RB/WR/TE eligible
 SF_SLOTS = 1          # QB/RB/WR/TE eligible (superflex)
@@ -168,7 +168,7 @@ You receive a JSON array of player cards for one team's full roster (already pro
 the Synthesis Agent, each with opportunity/production/trade-value scores) and must produce
 the overall roster grade.
 
-League format: 12-team, 4-round, SUPERFLEX (2 QB starts), PPR dynasty.
+League format: 12-team, 4-round, SUPERFLEX (2 QB starts), half-PPR dynasty.
 
 Steps:
 1. Call compute_current_roster_grade. It takes NO arguments — it already has the

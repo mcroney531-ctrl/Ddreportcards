@@ -1,5 +1,5 @@
 """
-Trade Agent — flags sell candidates on BCNH's roster. Same division of labor
+Trade Agent — flags sell candidates on the user's roster. Same division of labor
 as the rest of this project: deterministic signals are computed in code, the
 LLM only writes the specific "why" narrative for each flagged player. Phase 1
 scope is sell-candidates only — no cross-roster buy targets yet (that needs
@@ -16,7 +16,7 @@ synthesis_agent + roster_agent's shared quality_score:
   - positional_surplus: enough real contributors at one position that the
     weakest of the group is a reasonable candidate to deal from depth.
 
-Inputs:  list of player cards (as produced by synthesis_agent) for BCNH's roster
+Inputs:  list of player cards (as produced by synthesis_agent) for the user's roster
 Outputs: flagged sell candidates with signal type(s) and a written "why"
 """
 
@@ -117,7 +117,7 @@ def detect_sell_signals(player_cards_json: str) -> dict:
 
 SYSTEM_PROMPT = """You are the Trade Agent for a dynasty fantasy football roster report card tool.
 
-You receive a JSON array of player cards for BCNH's full roster and must flag sell
+You receive a JSON array of player cards for the user's full roster and must flag sell
 candidates. Phase 1 scope is sell-candidates only — do not suggest buy targets or
 name players from other rosters, that data isn't available yet.
 
@@ -197,7 +197,7 @@ def build_trade_agent(player_cards: list[dict]) -> LlmAgent:
 
 
 async def run_trade_agent(player_cards: list[dict]) -> dict:
-    """Run the Trade Agent over the full set of player cards for BCNH's roster."""
+    """Run the Trade Agent over the full set of player cards for the user's roster."""
     agent = build_trade_agent(player_cards)
     session_service = InMemorySessionService()
     runner = Runner(agent=agent, app_name="dynasty_report_cards", session_service=session_service)

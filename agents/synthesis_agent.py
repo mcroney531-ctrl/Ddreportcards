@@ -157,7 +157,7 @@ You orchestrate the full per-player evaluation pipeline for one rostered player:
    risk_modifier, market fields and identity are copied onto the card in code; your job is
    key_strengths, key_concerns and the narrative, consistent with those results
 
-This is a 12-team, 4-round, superflex (2 QB starts), PPR dynasty league. Weigh QB value
+This is a 12-team, 4-round, superflex (2 QB starts), half-PPR dynasty league. Weigh QB value
 accordingly in your narrative — a rostered QB carries a real superflex premium.
 
 CRITICAL — for the "player" and "team" fields in your output, use the values returned by

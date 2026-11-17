@@ -1,6 +1,6 @@
 # Dynasty Report Cards
 
-Roster report card agent for a 12-team superflex PPR dynasty league. Grades every
+Roster report card agent for a 12-team superflex half-PPR dynasty league. Grades every
 player on a roster (Opportunity, Production, Risk, Trade Value), rolls those grades
 into an overall roster grade, and flags sell candidates for the trade section.
 
