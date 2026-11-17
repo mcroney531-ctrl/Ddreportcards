@@ -8,7 +8,8 @@ out of the offline suite since the installed set varies by environment (a
 bare dev sandbox may not have every package installed at all) in a way
 requirements.txt's own contents do not.
 
-Stage 2C-7: the actual file now holds the eight ==-pins plus exactly one
+Stage 2C-7: the actual file holds the ==-pins (seven since the Streamlit UI was
+retired and its streamlit pin removed) plus exactly one
 immutable dynasty-core Git pin (the canonical shared package, replacing the
 local dynasty_core/ copy). test_dependency_contract.py proves every other
 VCS/URL form is rejected. parse_requirements() covers the whole contract;
@@ -28,7 +29,6 @@ EXPECTED_DIRECT_DEPENDENCIES = {
     "google-adk",
     "litellm",
     "anthropic",
-    "streamlit",
     "httpx",
     "python-dotenv",
     "fastapi",
@@ -48,7 +48,7 @@ class RequirementsAreFullyPinnedTest(unittest.TestCase):
             "every non-comment line must be an exact ==-pin or the immutable dynasty-core Git pin",
         )
 
-    def test_all_eight_direct_dependencies_are_present(self):
+    def test_all_seven_direct_dependencies_are_present(self):
         pins = check_versions.parse_pins()
         self.assertEqual(set(pins.keys()), EXPECTED_DIRECT_DEPENDENCIES)
 
@@ -57,11 +57,11 @@ class RequirementsAreFullyPinnedTest(unittest.TestCase):
         self.assertIn("google-adk[extensions]==", text)
         self.assertIn("uvicorn[standard]==", text)
 
-    def test_eight_version_pins_plus_one_immutable_dynasty_core_pin(self):
+    def test_seven_version_pins_plus_one_immutable_dynasty_core_pin(self):
         specs = check_versions.parse_requirements()
-        self.assertEqual(len(specs), 9)
-        self.assertEqual(sum(spec["kind"] == "version" for spec in specs.values()), 8)
-        self.assertEqual(len(check_versions.parse_pins()), 8)
+        self.assertEqual(len(specs), 8)
+        self.assertEqual(sum(spec["kind"] == "version" for spec in specs.values()), 7)
+        self.assertEqual(len(check_versions.parse_pins()), 7)
         git = {name: spec for name, spec in specs.items() if spec["kind"] == "git"}
         self.assertEqual(list(git), ["dynasty-core"])
         self.assertEqual(git["dynasty-core"]["repo"], "https://github.com/mcroney531-ctrl/dynasty-core")

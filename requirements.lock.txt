@@ -9,12 +9,16 @@
 # requirements.txt. To regenerate after changing requirements.txt, repeat those
 # steps in a fresh venv and replace everything below this header. pip itself is
 # pinned in scripts/render_build.sh, not here.
+#
+# Regenerated 2026-11-17 the same way after removing streamlit (the retired
+# Streamlit UI was its only user), with `-c` set to the previous lock so no
+# other version could move: the only change is 7 removed packages (altair,
+# itsdangerous, narwhals, pyarrow, pydeck, streamlit, toml).
 aiohappyeyeballs==2.7.1
 aiohttp-retry==2.9.1
 aiohttp==3.14.5
 aiosignal==1.4.0
 aiosqlite==0.22.1
-altair==6.3.0
 annotated-doc==0.0.5
 annotated-types==0.8.0
 anthropic==1.7.0
@@ -72,7 +76,6 @@ httpx==0.28.1
 huggingface_hub==2.4.0
 idna==3.20
 importlib_metadata==8.9.0
-itsdangerous==2.2.0
 Jinja2==3.1.6
 jiter==0.19.0
 jmespath==1.1.0
@@ -102,7 +105,6 @@ MarkupSafe==3.0.4
 marshmallow==3.26.2
 multidict==7.2.1
 mypy_extensions==1.2.0
-narwhals==2.28.0
 nest-asyncio==1.6.0
 networkx==3.7
 nltk==3.10.4
@@ -122,14 +124,12 @@ prometheus_client==0.26.0
 propcache==0.5.4
 proto-plus==1.29.0
 protobuf==7.36.2
-pyarrow==25.0.1
 pyasn1==0.6.5
 pyasn1_modules==0.4.2
 pycparser==3.12
 pydantic-settings==2.16.2
 pydantic==2.14.3
 pydantic_core==2.50.4
-pydeck==0.9.3
 pypdf==6.21.4
 PyPika==0.51.1
 python-dateutil==2.9.0.post0
@@ -150,13 +150,11 @@ sniffio==1.3.1
 soupsieve==4.1
 SQLAlchemy==2.1.8
 starlette==1.10.0
-streamlit==1.64.0
 striprtf==0.0.26
 tenacity==9.1.4
 tiktoken==0.14.0
 tinytag==2.3.2
 tokenizers==0.23.3
-toml==0.10.2
 toolbox-adk==1.4.0
 toolbox-core==1.4.0
 tqdm==4.70.1

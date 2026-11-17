@@ -5,15 +5,18 @@ player on a roster (Opportunity, Production, Risk, Trade Value), rolls those gra
 into an overall roster grade, and flags sell candidates for the trade section.
 
 Single team: league identity (league id, team "The Psych Ward", owner
-`TitansTrev55`) comes from `config/dynasty_config.py`, the one source both the
-FastAPI service and the Streamlit app read. It is not set through the environment.
+`TitansTrev55`) comes from `config/dynasty_config.py`, the one source the FastAPI
+service reads. It is not set through the environment.
+
+The product is the FastAPI service in `api.py`, deployed on Render and used by GM
+Command. The original Streamlit report-card UI (`app.py`) has been retired.
 
 ## Setup
 
 ```
 pip install -r requirements.txt
 cp .env.example .env   # fill in ANTHROPIC_API_KEY, GOOGLE_API_KEY
-streamlit run app.py
+uvicorn api:app --reload
 ```
 
 ## Architecture
@@ -28,7 +31,7 @@ streamlit run app.py
 - `agents/synthesis_agent.py` — orchestrates the three into one player card.
 - `agents/roster_agent.py` — aggregates player cards into the overall roster grade.
 - `agents/trade_agent.py` — flags sell candidates with reasoning.
-- `app.py` — Streamlit frontend (roster overview, player card, trade section).
+- `api.py` — FastAPI service: report endpoints, GM Command's chat, /league, /health.
 
 ## Testing
 

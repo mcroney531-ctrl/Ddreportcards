@@ -22,7 +22,6 @@ this is a semantic correction, not a scoring-model redesign.
 """
 import inspect
 import json
-import os
 import unittest
 
 import agents.production_agent as production_agent
@@ -60,13 +59,6 @@ class InjuryChancePctIsGoneTest(unittest.TestCase):
     def test_trade_agent_prompt_has_no_injury_chance_pct(self):
         self.assertNotIn("injury_chance_pct", trade_agent.SYSTEM_PROMPT)
 
-    def test_app_source_has_no_injury_chance_pct(self):
-        app_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), "app.py")
-        with open(app_path, encoding="utf-8") as f:
-            source = f.read()
-        self.assertNotIn("injury_chance_pct", source)
-        self.assertNotIn("Injury chance", source)
-
 
 class DurabilityScoreIsGoneFromActiveScoringTest(unittest.TestCase):
     """durability_score must not appear in active Production/Synthesis/
@@ -92,13 +84,6 @@ class DurabilityScoreIsGoneFromActiveScoringTest(unittest.TestCase):
     def test_trade_agent_has_no_durability_constant_or_field(self):
         self.assertFalse(hasattr(trade_agent, "SELL_HIGH_DURABILITY_MAX"))
         self.assertNotIn("durability_score", trade_agent.SYSTEM_PROMPT)
-
-    def test_app_source_has_no_durability_score(self):
-        app_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), "app.py")
-        with open(app_path, encoding="utf-8") as f:
-            source = f.read()
-        self.assertNotIn("durability_score", source)
-        self.assertNotIn("Durability", source)
 
 
 class CurrentHealthScoreFlowsProductionToSynthesisToMarketTest(unittest.TestCase):
@@ -138,13 +123,6 @@ class CurrentHealthScoreFlowsProductionToSynthesisToMarketTest(unittest.TestCase
     def test_trade_agent_uses_current_health_score(self):
         self.assertTrue(hasattr(trade_agent, "SELL_HIGH_CURRENT_HEALTH_MAX"))
         self.assertIn("current_health_score", inspect.getsource(trade_agent.detect_sell_signals))
-
-    def test_app_source_uses_current_health_score(self):
-        app_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), "app.py")
-        with open(app_path, encoding="utf-8") as f:
-            source = f.read()
-        self.assertIn("current_health_score", source)
-        self.assertIn("Current health", source)
 
 
 class MarketConversionAndWeightsUnchangedTest(unittest.TestCase):

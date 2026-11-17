@@ -1,9 +1,9 @@
 """Ddreportcards' canonical league profile for Dynasty Daddies.
 
 The one source of this app's deployment identity (league_id, league and team
-names, the owner's Sleeper display name) and of verified league facts. Both
-api.py (every Sleeper call, /league, the chat get_league_info tool) and the
-Streamlit app.py read it; neither reads identity from the environment.
+names, the owner's Sleeper display name) and of verified league facts.
+api.py (every Sleeper call, /league, the chat get_league_info tool) reads it;
+identity is never read from the environment.
 
 GM Command's dynasty_config.json is a checked mirror of this profile:
   python scripts/check_league_profile.py --gm-config ../gm-command/dynasty_config.json

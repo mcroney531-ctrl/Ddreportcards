@@ -10,12 +10,11 @@ deleted (Phase 4C's dead-code map found zero importers anywhere in either
 Ddreportcards or scoutcap, confirmed with a repo-wide grep in each before
 deletion). These tests predate that and were never about the files
 themselves -- they prove Ddreportcards' *active* paths (production_agent,
-api.py's endpoints/chat tools/system prompt, app.py's Streamlit UI) no
+api.py's endpoints/chat tools/system prompt) no
 longer call into LeagueLogs, which remains true and worth guarding against
 regressing even with the dead files gone.
 """
 import inspect
-import os
 import unittest
 
 from fastapi.testclient import TestClient
@@ -23,7 +22,6 @@ from fastapi.testclient import TestClient
 import api
 from agents import production_agent
 
-_APP_PY_PATH = os.path.join(os.path.dirname(os.path.dirname(__file__)), "app.py")
 
 
 class ProductionAgentHasNoLeagueLogsTest(unittest.TestCase):
@@ -92,17 +90,6 @@ class EspnAthleteIdFallbackIsSleeperFantasyCalcOnlyTest(unittest.TestCase):
         source = inspect.getsource(api._espn_athlete_id)
         self.assertNotIn("leaguelogs", source.lower())
         self.assertNotIn("get_espn_id", source)
-
-
-class StreamlitUiHasNoLeagueLogsAttributionTest(unittest.TestCase):
-    def test_app_source_has_no_leaguelogs_reference(self):
-        # Read as plain text rather than importing app.py: streamlit isn't
-        # installed in every environment that runs this test suite (it's a
-        # separate deployment surface from the FastAPI service these other
-        # tests exercise), and this doesn't need a live Streamlit context.
-        with open(_APP_PY_PATH) as f:
-            source = f.read()
-        self.assertNotIn("leaguelogs", source.lower())
 
 
 if __name__ == "__main__":
