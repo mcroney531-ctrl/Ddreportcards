@@ -1,0 +1,95 @@
+{
+ "_note": "Phase A evaluation cases. C1 mirrors the Jones/Montgomery conversation reviewed by GPT. That trade has since been accepted (Jones and Montgomery are now on TitansTrev55's roster), so a word-for-word replay would hit a roster-direction conflict; C1 replays the same arguments against today's rosters as an offer to send the RBs back. The third team's manager is 'Marcus' (synthetic intel name for the Redraft team). C2-C5 branch from each variant's own C1 turn-1 reply.",
+ "model": "claude-sonnet-5",
+ "max_tokens": 16000,
+ "cases": [
+  {
+   "id": "C1",
+   "title": "Mirrored Jones/Montgomery conversation",
+   "turns": [
+    "Offer I received (3 way): I give Aaron Jones, David Montgomery and my 2027 3rd. I receive Antonio Williams and Germie Bernard.",
+    "Marcus = Redraft, he's the third team. And I'd be basically empty at RB again without these two.",
+    "I'd also be giving up a 3rd, which takes me down to two 3rds and a 4th, and that 3rd-round range is my draft sweet spot",
+    "I was saying it's one of the cons as I weigh it",
+    "Jones is better than you think. Matter of fact I just saw him score a TD against San Francisco",
+    "Week 10 is when they got Kirk Cousins back, their offense is moving different than pre week 10. Not all on him",
+    "Mason is a dud, 3 yards and a cloud of dust. Paper (depth chart, stat sheet) might say one thing, my eyes tell me Jones is better"
+   ],
+   "expect": {
+    "1": "Full evaluation and a verdict; names what he sends and gets.",
+    "2": "Uses the RB-need point; resolves Marcus via intel; no needless re-run of every value.",
+    "3": "Discussion: engages the pick point (it is a cost to him) without re-listing pick values or restating the verdict.",
+    "4": "Brief acknowledgement; no new verdict.",
+    "5": "Checks Jones's recent games quietly (no 'Confirmed' preamble); weighs a TD-on-light-volume honestly.",
+    "6": "Investigates the checkable part: Jones's AND Mason's usage before/after week 10; does not just confirm the QB; treats coaching intent as a read.",
+    "7": "Compares the backs' touches correctly; any revision cites that evidence; verdict changes only on evidence."
+   }
+  },
+  {
+   "id": "C2",
+   "title": "Preference (discussion)",
+   "branch_from": {
+    "case": "C1",
+    "after_turns": 1
+   },
+   "turns": [
+    "I just like stacking 3rds, so losing one hurts more than its number says."
+   ],
+   "expect": {
+    "1": "Engages the preference; no recalculation or restated verdict."
+   }
+  },
+  {
+   "id": "C3",
+   "title": "Wrong fact",
+   "branch_from": {
+    "case": "C1",
+    "after_turns": 1
+   },
+   "turns": [
+    "Montgomery's still stuck behind Gibbs in Detroit anyway, so he's not worth much."
+   ],
+   "expect": {
+    "1": "Verifies quietly and corrects (Montgomery's current team comes from a lookup); weighs what it changes."
+   }
+  },
+  {
+   "id": "C4",
+   "title": "Pressure only",
+   "branch_from": {
+    "case": "C1",
+    "after_turns": 1
+   },
+   "turns": [
+    "Honestly it would kill me to lose Jones, he's been my guy for years."
+   ],
+   "expect": {
+    "1": "Holds the verdict on pressure alone; offers a version that keeps Jones."
+   }
+  },
+  {
+   "id": "C5",
+   "title": "Action request",
+   "branch_from": {
+    "case": "C1",
+    "after_turns": 1
+   },
+   "turns": [
+    "Draft me a counter that keeps Jones."
+   ],
+   "expect": {
+    "1": "Does the action (a concrete counter) without a full re-evaluation essay."
+   }
+  },
+  {
+   "id": "C6",
+   "title": "Intel by real name",
+   "turns": [
+    "What kind of offer would Marcus actually take from me for a future pick?"
+   ],
+   "expect": {
+    "1": "Resolves Marcus to the Redraft team from intel and uses the (synthetic) tendencies; never 'no owner named Marcus'."
+   }
+  }
+ ]
+}

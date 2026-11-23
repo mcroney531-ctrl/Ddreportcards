@@ -1,0 +1,117 @@
+# Phase A (GM Assistant conversation quality) evaluation.
+#
+# Runs only on pushes to the Phase A branch, never on Render's deploy branch,
+# and never on pull requests (so forks can't reach the secret).
+#
+#   checks: unit tests, prompt snapshots rebuilt from the live app code
+#           (fails if they drift from the committed ones), and a no-cost
+#           smoke test of every chat tool from this runner. No model calls.
+#   paid:   runs only when the push adds or changes an approval file under
+#           evals/runs/ AND the ANTHROPIC_EVAL_API_KEY secret exists. The
+#           harness itself refuses to run without both, and caps spend at
+#           min(approval cap, $3) per variant.
+name: phase-a-eval
+
+on:
+  push:
+    branches: [claude/phase-a-conversation-quality]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: phase-a-eval
+  cancel-in-progress: false
+
+env:
+  GM_REPO: mcroney531-ctrl/gm-command
+  GM_BASELINE_REF: main
+  GM_CANDIDATE_REF: claude/dynasty-umbrella-consolidation-4waag0
+  PLAYWRIGHT_VERSION: 1.48.2
+
+jobs:
+  checks:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    outputs:
+      approval: ${{ steps.approval.outputs.file }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/checkout@v4
+        with: { repository: "${{ env.GM_REPO }}", ref: "${{ env.GM_BASELINE_REF }}", path: _gm_baseline }
+      - uses: actions/checkout@v4
+        with: { repository: "${{ env.GM_REPO }}", ref: "${{ env.GM_CANDIDATE_REF }}", path: _gm_candidate }
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.12" }
+      - uses: actions/setup-node@v4
+        with: { node-version: "20" }
+      - name: Install (the same locked install Render runs)
+        run: |
+          bash scripts/render_build.sh
+          npm install --no-save "playwright@${PLAYWRIGHT_VERSION}"
+          npx playwright install --with-deps chromium
+      - name: Unit tests
+        run: python -m unittest discover -s tests
+      - name: Prompt snapshots match the live app code
+        run: |
+          python -m evals.build_snapshots --capture-gm-baseline _gm_baseline --capture-gm-candidate _gm_candidate
+          git diff --stat --exit-code -- tests/fixtures/prompt_snapshots
+      - name: Tool connectivity smoke test (no model calls)
+        run: python -m evals.run_eval smoke --out _eval_out/smoke
+        continue-on-error: true
+      - name: Approval file in this push?
+        id: approval
+        run: |
+          before="${{ github.event.before }}"
+          if [ "$before" = "0000000000000000000000000000000000000000" ]; then before="$(git rev-list --max-parents=0 HEAD | tail -1)"; fi
+          files="$(git diff --name-only --diff-filter=AM "$before" "${{ github.sha }}" -- 'evals/runs/*.json')"
+          count="$(printf '%s' "$files" | grep -c . || true)"
+          if [ "$count" = "1" ]; then echo "file=$files" >> "$GITHUB_OUTPUT"; echo "approval: $files"; else echo "no single approval file in this push ($count)"; fi
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with: { name: smoke, path: _eval_out/smoke, retention-days: 7, if-no-files-found: ignore }
+
+  paid:
+    needs: checks
+    if: needs.checks.outputs.approval != ''
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    env:
+      ANTHROPIC_EVAL_API_KEY: ${{ secrets.ANTHROPIC_EVAL_API_KEY }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+        with: { repository: "${{ env.GM_REPO }}", ref: "${{ env.GM_BASELINE_REF }}", path: _gm_baseline }
+      - uses: actions/checkout@v4
+        with: { repository: "${{ env.GM_REPO }}", ref: "${{ env.GM_CANDIDATE_REF }}", path: _gm_candidate }
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.12" }
+      - uses: actions/setup-node@v4
+        with: { node-version: "20" }
+      - name: Install
+        run: |
+          bash scripts/render_build.sh
+          npm install --no-save "playwright@${PLAYWRIGHT_VERSION}"
+          npx playwright install --with-deps chromium
+      - name: Capture the app's prompt text (live Sleeper, synthetic intel)
+        run: |
+          mkdir -p _eval_out/paid
+          python - <<'PY'
+          import json
+          cases = json.load(open("evals/cases.json"))
+          intel = json.load(open("evals/eval_intel.json"))["intel"]
+          msgs = [t for c in cases["cases"] for t in c["turns"]]
+          json.dump({"sleeper": "live", "intel": intel, "messages": msgs}, open("_eval_out/spec.json", "w"))
+          PY
+          node evals/frontend_capture.js _gm_baseline _eval_out/spec.json _eval_out/paid/frontend.baseline.json
+          node evals/frontend_capture.js _gm_candidate _eval_out/spec.json _eval_out/paid/frontend.candidate.json
+      - name: Run the approved evaluation
+        run: |
+          python -m evals.run_eval paid --approval "${{ needs.checks.outputs.approval }}" --out _eval_out/paid \
+            --frontend-baseline _eval_out/paid/frontend.baseline.json \
+            --frontend-candidate _eval_out/paid/frontend.candidate.json
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with: { name: eval-results, path: _eval_out/paid, retention-days: 7, if-no-files-found: ignore }
