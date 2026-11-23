@@ -335,6 +335,38 @@ def enforce_report(request) -> None:
     check_budget()
 
 
+# ── League Intel ────────────────────────────────────────────────────────────
+#
+# Intel is the user's personal notes, so its gate differs from chat's:
+#   * fail-closed: with GM_CHAT_SECRET unset, chat stays open (and /health
+#     warns) but intel refuses outright;
+#   * writes are accepted only from the production app's exact Origin.
+#     Deploy previews, localhost and Origin-less callers may read but not
+#     write, so a test preview can never overwrite real notes. This is a
+#     server-side check, not CORS: CORS only governs what a browser lets a
+#     page read back.
+PRODUCTION_ORIGIN = "https://gm-command.netlify.app"
+INTEL_RATE_LIMIT_REQUESTS = _int_env("GM_INTEL_RATE_REQUESTS", 120)
+INTEL_RATE_WINDOW_SECONDS = _int_env("GM_INTEL_RATE_WINDOW", 3600)
+
+
+def enforce_intel(request, write: bool) -> None:
+    if not SHARED_SECRET:
+        raise ChatRefused(503, "Intel is disabled: the service has no access key configured.")
+    check_secret(request)
+    if write:
+        if request.headers.get("origin") != PRODUCTION_ORIGIN:
+            raise ChatRefused(403, "Intel can only be changed from the production app.")
+    else:
+        check_origin(request)
+    check_rate_limit(
+        client_ip(request),
+        bucket="intel",
+        limit=INTEL_RATE_LIMIT_REQUESTS,
+        window=INTEL_RATE_WINDOW_SECONDS,
+    )
+
+
 def config_warnings() -> list[str]:
     """Surfaced by /health so a missing control is visible rather than assumed."""
     warnings = []

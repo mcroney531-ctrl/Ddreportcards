@@ -43,7 +43,7 @@ from anthropic import Anthropic
 from fastapi import FastAPI, HTTPException, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict, Field
 
 log = logging.getLogger("gm.api")
 
@@ -81,6 +81,7 @@ _configure_gm_logging()
 
 import budget
 import chat_guard
+import intel_store
 import picks as picks_module
 from config.dynasty_config import LEAGUE
 from dynasty_core.fantasycalc import index_picks_by_label  # noqa: E402
@@ -194,7 +195,7 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=chat_guard.ALLOWED_ORIGINS,
     allow_origin_regex=chat_guard.ALLOWED_ORIGIN_REGEX,
-    allow_methods=["GET", "POST"],
+    allow_methods=["GET", "POST", "PUT"],
     allow_headers=["*"],
 )
 
@@ -1782,6 +1783,153 @@ def _is_budget_control(exc: object) -> bool:
 # synthesis_agent uses _run_in_thread() internally to dodge Streamlit's
 # nested-asyncio constraint. In FastAPI's pure-async context that helper is
 # harmless — each thread creates its own event loop, no collision.
+
+# ── League Intel (no LLM) ───────────────────────────────────────────────────
+#
+# Server-side persistence for GM Command's League Intel: a real name, an
+# AI-synthesized breakdown and add-only observations per leaguemate. The
+# storage contract (server revisions, compare-and-set, write-once
+# observations, key isolation) lives in intel_store; this layer adds access
+# control, validation and HTTP status mapping. Nothing here calls a model.
+#
+# Status codes: 401 bad/missing key; 403 write from a non-production origin;
+# 404 owner not in the league; 409 stale base_rev or reused observation id
+# (with the current value, never an overwrite); 422 invalid input; 503 store,
+# Sleeper or configuration unavailable. A 200 is only ever a complete answer.
+
+_CONTROL = re.compile(r"[\x00-\x1f\x7f]")
+_CONTROL_EXCEPT_NEWLINE = re.compile(r"[\x00-\x09\x0b-\x1f\x7f]")
+_intel_members_cache: tuple[float, frozenset[str]] | None = None
+
+
+class IntelNameIn(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    value: str = Field(max_length=40)
+    base_rev: int = Field(ge=0)
+
+
+class IntelBreakdownIn(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    value: str = Field(max_length=4000)
+    base_rev: int = Field(ge=0)
+    covers: list[str] = Field(default_factory=list, max_length=intel_store.MAX_OBSERVATIONS)
+
+
+class IntelObservationIn(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    text: str = Field(min_length=1, max_length=1000)
+    date_label: str = Field(default="", max_length=20)
+
+
+def _intel_gate(request: Request, write: bool) -> None:
+    try:
+        chat_guard.enforce_intel(request, write=write)
+    except chat_guard.ChatRefused as refused:
+        raise HTTPException(status_code=refused.status_code, detail=refused.detail)
+
+
+def _intel_store() -> intel_store.IntelStore:
+    try:
+        return intel_store.store()
+    except intel_store.IntelUnavailable:
+        raise HTTPException(status_code=503, detail="Intel storage is unavailable.")
+
+
+def _intel_league_members() -> frozenset[str]:
+    global _intel_members_cache
+    now = time.time()
+    if _intel_members_cache and now - _intel_members_cache[0] < _LEAGUE_ROSTER_TTL_SECONDS:
+        return _intel_members_cache[1]
+    try:
+        members = frozenset(str(u["user_id"]) for u in get_league_users(LEAGUE_ID))
+    except Exception as exc:  # noqa: BLE001 — unknown is not "not a member"
+        log.warning("intel_members_unavailable error=%s", type(exc).__name__)
+        raise HTTPException(status_code=503, detail="League membership is unavailable; try again.")
+    _intel_members_cache = (now, members)
+    return members
+
+
+def _intel_owner(owner_id: str) -> str:
+    if not intel_store.OWNER_ID_RE.fullmatch(owner_id):
+        raise HTTPException(status_code=422, detail="Invalid owner id.")
+    if owner_id not in _intel_league_members():
+        raise HTTPException(status_code=404, detail="Not a member of this league.")
+    return owner_id
+
+
+def _intel_write(op: str, owner_id: str, fn):
+    try:
+        result = fn()
+    except ValueError:
+        raise HTTPException(status_code=422, detail="Invalid intel data.")
+    except intel_store.IntelUnavailable:
+        log.warning("intel_write op=%s owner=%s outcome=unavailable", op, owner_id)
+        raise HTTPException(status_code=503, detail="Intel storage is unavailable.")
+    log.info("intel_write op=%s owner=%s outcome=%s rev=%s", op, owner_id,
+             "ok" if result.get("ok") else "refused", result.get("rev", "-"))
+    return result
+
+
+@app.get("/intel")
+def get_intel(request: Request) -> dict:
+    _intel_gate(request, write=False)
+    s = _intel_store()
+    try:
+        data = s.read_all()
+    except intel_store.IntelUnavailable:
+        raise HTTPException(status_code=503, detail="Intel storage is unavailable.")
+    log.info("intel_read leaguemates=%d rev=%d", len(data["leaguemates"]), data["rev"])
+    return data
+
+
+@app.put("/intel/{owner_id}/name")
+def put_intel_name(owner_id: str, body: IntelNameIn, request: Request) -> dict:
+    _intel_gate(request, write=True)
+    _intel_owner(owner_id)
+    if body.value != body.value.strip() or _CONTROL.search(body.value):
+        raise HTTPException(status_code=422, detail="Name must be one trimmed line.")
+    s = _intel_store()
+    result = _intel_write("name", owner_id, lambda: s.set_name(owner_id, body.value, body.base_rev))
+    if not result["ok"]:
+        raise HTTPException(status_code=409, detail={"conflict": "name", "current": result["current"]})
+    return {"ok": True, "rev": result["rev"], "value": body.value}
+
+
+@app.put("/intel/{owner_id}/breakdown")
+def put_intel_breakdown(owner_id: str, body: IntelBreakdownIn, request: Request) -> dict:
+    _intel_gate(request, write=True)
+    _intel_owner(owner_id)
+    if _CONTROL_EXCEPT_NEWLINE.search(body.value):
+        raise HTTPException(status_code=422, detail="Breakdown contains control characters.")
+    if len(set(body.covers)) != len(body.covers):
+        raise HTTPException(status_code=422, detail="Duplicate observation ids in covers.")
+    s = _intel_store()
+    result = _intel_write("breakdown", owner_id,
+                          lambda: s.set_breakdown(owner_id, body.value, body.base_rev, body.covers))
+    if result.get("unknown_observation"):
+        raise HTTPException(status_code=422, detail="covers names an observation that is not stored.")
+    if not result["ok"]:
+        raise HTTPException(status_code=409, detail={"conflict": "breakdown", "current": result["current"]})
+    return {"ok": True, "rev": result["rev"]}
+
+
+@app.put("/intel/{owner_id}/observations/{obs_id}")
+def put_intel_observation(owner_id: str, obs_id: str, body: IntelObservationIn, request: Request) -> dict:
+    _intel_gate(request, write=True)
+    _intel_owner(owner_id)
+    if not intel_store.OBS_ID_RE.fullmatch(obs_id):
+        raise HTTPException(status_code=422, detail="Observation id must be a lowercase UUID.")
+    if _CONTROL.search(body.date_label) or _CONTROL_EXCEPT_NEWLINE.search(body.text) or not body.text.strip():
+        raise HTTPException(status_code=422, detail="Invalid observation text or date label.")
+    s = _intel_store()
+    result = _intel_write("observation", owner_id,
+                          lambda: s.add_observation(owner_id, obs_id, body.text, body.date_label))
+    if result.get("limit"):
+        raise HTTPException(status_code=422, detail="Observation limit reached for this leaguemate.")
+    if not result["ok"]:
+        raise HTTPException(status_code=409, detail={"conflict": "observation", "rev": result["rev"]})
+    return {"ok": True, "created": result["created"], "rev": result["rev"]}
+
 
 @app.post("/report/player/{sleeper_id}")
 async def report_player(sleeper_id: str, request: Request) -> dict:
