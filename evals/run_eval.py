@@ -236,9 +236,12 @@ def smoke(args):
         results.append({"tool": name, "ok": ok, "ms": int((time.time() - t) * 1000), "detail": detail})
         return r
 
-    pv = call("get_player_value", {"player_name": "Aaron Jones"}) or {}
-    first = (pv.get("results") or pv.get("players") or [{}])
-    pid = (first[0] if isinstance(first, list) and first else {}).get("player_id")
+    def first_id(result):
+        hits = (result or {}).get("results") or []
+        return hits[0].get("player_id") if hits else None
+
+    pid = first_id(call("get_player_value", {"player_name": "Aaron Jones"}))
+    pid2 = first_id(api._execute_chat_tool("get_player_value", {"player_name": "David Montgomery"}, ""))
     call("get_roster", {"owner": "TitansTrev55"})
     call("get_pick_inventory", {"owner": "TitansTrev55"})
     call("get_league_rosters_summary", {})
@@ -248,7 +251,8 @@ def smoke(args):
     if pid:
         call("get_player_news", {"sleeper_id": pid})
         call("get_player_stats", {"sleeper_id": pid, "games": 3})
-        call("evaluate_trade", {"team_a_sends": [pid], "team_b_sends": []})
+        if pid2:
+            call("evaluate_trade", {"team_a_sends": [pid], "team_b_sends": [pid2]})
     else:
         results.append({"tool": "get_player_news/get_player_stats/evaluate_trade", "ok": False, "ms": 0,
                         "detail": "skipped: no player_id from get_player_value"})
