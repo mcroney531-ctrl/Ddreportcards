@@ -17,6 +17,8 @@ from fastapi.testclient import TestClient
 import api
 import budget
 import chat_guard
+import chat_prompt
+from evals import baseline_chat_prompt as baseline
 
 FROZEN_TODAY_TOKEN = "<TODAY>"
 
@@ -111,7 +113,11 @@ def record(scenario_name: str, today: str) -> dict:
     fake_client.messages = _FakeMessages(sc["script"], log)
     budget._set_store_for_tests(budget.MemoryBudgetStore())
     chat_guard._hits.clear()
-    with mock.patch.object(api, "_anthropic_client", fake_client), \
+    # The recording pins the pre-Phase-A prompt, so replay with that text:
+    # this test is about the execution path, not the wording.
+    with mock.patch.object(chat_prompt, "CHAT_SYSTEM_PROMPT", baseline.CHAT_SYSTEM_PROMPT), \
+         mock.patch.object(chat_prompt, "_conversation_stance", baseline._conversation_stance), \
+         mock.patch.object(api, "_anthropic_client", fake_client), \
          mock.patch.object(api, "_execute_chat_tool", fake_tool), \
          mock.patch.object(chat_guard, "SHARED_SECRET", ""):
         resp = TestClient(api.app).post("/chat", json=sc["body"])

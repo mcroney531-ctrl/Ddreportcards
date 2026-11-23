@@ -8,7 +8,9 @@ anything, tests/_chat_golden.py recorded the ORIGINAL inline implementation
 (d154a90) into tests/fixtures/chat_loop_golden.json: every count_tokens and
 create call (model, max_tokens, full system text, full messages, a hash of the
 tool definitions), every tool execution, and the HTTP response, across five
-scenarios. The refactored code must reproduce that recording exactly.
+scenarios. The refactored code, run with the baseline prompt text
+(evals/baseline_chat_prompt.py, a verbatim copy), must reproduce that
+recording exactly; Phase A then changes only the wording.
 """
 import datetime
 import inspect
@@ -51,6 +53,19 @@ class SingleAssemblyPathTest(unittest.TestCase):
     def test_api_reexports_the_same_objects(self):
         self.assertIs(api.CHAT_SYSTEM_PROMPT, chat_prompt.CHAT_SYSTEM_PROMPT)
         self.assertIs(api._conversation_stance, chat_prompt._conversation_stance)
+
+    def test_baseline_copy_is_the_pre_phase_a_prompt(self):
+        import subprocess
+        from evals import baseline_chat_prompt as baseline
+        original = subprocess.run(["git", "show", "223b16f:chat_prompt.py"], capture_output=True, text=True,
+                                  cwd=pathlib.Path(__file__).parent.parent)
+        if original.returncode != 0:
+            self.skipTest("git history not available")
+        ns = {}
+        exec(compile(original.stdout, "orig", "exec"), ns)
+        self.assertEqual(baseline.CHAT_SYSTEM_PROMPT, ns["CHAT_SYSTEM_PROMPT"])
+        msgs = [{"role": "user", "content": "a"}, {"role": "assistant", "content": "b"}, {"role": "user", "content": "c"}]
+        self.assertEqual(baseline._conversation_stance(msgs), ns["_conversation_stance"](msgs))
 
     def test_loop_takes_client_and_tool_executor_explicitly(self):
         params = inspect.signature(api.run_chat_loop).parameters
