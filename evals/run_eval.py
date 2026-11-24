@@ -139,40 +139,66 @@ def reply_text(payload: dict) -> str:
     return "".join(b.get("text", "") for b in payload.get("content", []) if b.get("type") == "text")
 
 
-def run_variant_case(variant, case, cases_doc, frontend, cache, client, transcripts):
-    """Run one case for one variant. Returns False when the budget stopped it."""
-    module = VARIANT_PROMPTS[variant]
-    contexts = {c["text"]: c for c in frontend["contexts"]}
+_ERR_STATUS = re.compile(r"Error code: (\d{3})")
+_ERR_TYPE = re.compile(r"'type': '([a-z_]+_error)'")
+
+
+def classify_api_error(message: str) -> dict:
+    """Public-safe summary of a model API error: status, type, and a coarse
+    kind. Never the raw message (it can echo request content)."""
+    status = _ERR_STATUS.search(message or "")
+    etype = _ERR_TYPE.search(message or "")
+    text = (message or "").lower()
+    kind = ("credit_balance" if "credit balance" in text else
+            "rate_limit" if "rate" in text and "limit" in text else
+            "overloaded" if "overloaded" in text else "other")
+    return {"status": int(status.group(1)) if status else None,
+            "type": etype.group(1) if etype else None, "kind": kind}
+
+
+def new_case_state(case, transcripts):
     history = []
     if "branch_from" in case:
         src = transcripts[case["branch_from"]["case"]]
         history = copy.deepcopy(src["history"][: 2 * case["branch_from"]["after_turns"]])
     out = {"case": case["id"], "turns": [], "history": history}
-    for text in case["turns"]:
-        history.append({"role": "user", "content": text})
-        ctx = contexts.get(text, {})
-        app_system = frontend["liveSystemPrompt"] + ("\n\n" + ctx["context"] if ctx.get("context") else "")
-        outbound = copy.deepcopy(history)
-        if ctx.get("news"):
-            outbound[-1] = {"role": "user", "content": ctx["news"] + "\n\n" + text}
-        with mock.patch.object(chat_prompt, "CHAT_SYSTEM_PROMPT", module.CHAT_SYSTEM_PROMPT), \
-             mock.patch.object(chat_prompt, "_conversation_stance", module._conversation_stance):
-            system = chat_prompt.build_chat_system(app_system, outbound, time.strftime("%Y-%m-%d", time.gmtime()))
-        tool_log = []
-        loop_messages = copy.deepcopy(outbound)
-        try:
-            payload = asyncio.run(api.run_chat_loop(
-                model=cases_doc["model"], max_tokens=cases_doc["max_tokens"], system=system,
-                messages=loop_messages, client=client, execute_tool=cache.executor(variant, tool_log)))
-        except HTTPException as exc:
-            out["turns"].append({"user": text, "stopped": f"{exc.status_code}: {exc.detail}"})
-            transcripts[case["id"]] = out
-            return False
-        reply = reply_text(payload)
-        history.append({"role": "assistant", "content": reply})
-        out["turns"].append({"user": text, "reply": reply, "tools": tool_log})
     transcripts[case["id"]] = out
-    return True
+    return out
+
+
+def run_turn(variant, text, cases_doc, frontend, cache, client, out):
+    """One user turn for one variant. Returns ("ok", None), ("budget", detail)
+    or ("api_error", classification)."""
+    module = VARIANT_PROMPTS[variant]
+    contexts = {c["text"]: c for c in frontend["contexts"]}
+    history = out["history"]
+    history.append({"role": "user", "content": text})
+    ctx = contexts.get(text, {})
+    app_system = frontend["liveSystemPrompt"] + ("\n\n" + ctx["context"] if ctx.get("context") else "")
+    outbound = copy.deepcopy(history)
+    if ctx.get("news"):
+        outbound[-1] = {"role": "user", "content": ctx["news"] + "\n\n" + text}
+    with mock.patch.object(chat_prompt, "CHAT_SYSTEM_PROMPT", module.CHAT_SYSTEM_PROMPT), \
+         mock.patch.object(chat_prompt, "_conversation_stance", module._conversation_stance):
+        system = chat_prompt.build_chat_system(app_system, outbound, time.strftime("%Y-%m-%d", time.gmtime()))
+    tool_log = []
+    try:
+        payload = asyncio.run(api.run_chat_loop(
+            model=cases_doc["model"], max_tokens=cases_doc["max_tokens"], system=system,
+            messages=copy.deepcopy(outbound), client=client, execute_tool=cache.executor(variant, tool_log)))
+    except HTTPException as exc:
+        history.pop()
+        out["turns"].append({"user": text, "stopped": f"budget: {exc.status_code}"})
+        return "budget", str(exc.status_code)
+    if payload.get("error") and str(payload["error"]).startswith("Error code:"):
+        history.pop()
+        info = classify_api_error(str(payload["error"]))
+        out["turns"].append({"user": text, "stopped": f"api_error: {info}"})
+        return "api_error", info
+    reply = reply_text(payload)
+    history.append({"role": "assistant", "content": reply})
+    out["turns"].append({"user": text, "reply": reply, "tools": tool_log})
+    return "ok", None
 
 
 def paid(args):
@@ -192,17 +218,28 @@ def paid(args):
         meter = Meter()
         client = meter.wrap(anthropic.Anthropic(api_key=key, max_retries=0))
         state[v] = {"store": store, "meter": meter, "client": client, "transcripts": {}, "stopped": None}
+    # Alternate variants turn by turn, so a run that stops early (cap, API
+    # error) leaves both variants with the same coverage, and both see live
+    # data at nearly the same moment. Any budget refusal or API error stops
+    # the WHOLE run: no further requests are sent.
+    run_stop = None
     for case in cases_doc["cases"]:
-        for v in approval["variants"]:           # interleaved: both variants see the same live data
-            s = state[v]
-            if s["stopped"]:
-                continue
-            with mock.patch.object(budget, "_store", s["store"]), \
-                 mock.patch.object(budget, "DAILY_LIMIT_MICRO", int(cap_usd * budget.USD)), \
-                 mock.patch.object(budget, "day_key", lambda now=None, _v=v: f"eval:{approval['run_id']}:{_v}"):
-                ok = run_variant_case(v, case, cases_doc, frontends[v], cache, s["client"], s["transcripts"])
-            if not ok:
-                s["stopped"] = case["id"]
+        if run_stop:
+            break
+        outs = {v: new_case_state(case, state[v]["transcripts"]) for v in approval["variants"]}
+        for i, text in enumerate(case["turns"], 1):
+            if run_stop:
+                break
+            for v in approval["variants"]:
+                s = state[v]
+                with mock.patch.object(budget, "_store", s["store"]), \
+                     mock.patch.object(budget, "DAILY_LIMIT_MICRO", int(cap_usd * budget.USD)), \
+                     mock.patch.object(budget, "day_key", lambda now=None, _v=v: f"eval:{approval['run_id']}:{_v}"):
+                    status, info = run_turn(v, text, cases_doc, frontends[v], cache, s["client"], outs[v])
+                if status != "ok":
+                    s["stopped"] = case["id"]
+                    run_stop = {"reason": status, "detail": info, "case": case["id"], "turn": i, "variant": v}
+                    break
     cache.save()
     drift = audit_drift(cache)
     parity = frontend_parity(frontends)
@@ -212,6 +249,9 @@ def paid(args):
                   "stopped_at_case": s["stopped"]} for v, s in state.items()}
     ledger["tool_cache"] = {"entries": len(cache.entries), "live_misses": cache.misses}
     ledger["evidence"] = {"drift_audit": drift, "frontend_parity": parity}
+    ledger["run_stopped"] = run_stop
+    ledger["completed_turns"] = {v: sum(1 for c in s["transcripts"].values() for t in c["turns"] if "reply" in t)
+                                 for v, s in state.items()}
     (out / "ledger.json").write_text(json.dumps(ledger, indent=1))
     for v, s in state.items():
         (out / f"transcripts.{v}.json").write_text(json.dumps(s["transcripts"], indent=1, default=str))

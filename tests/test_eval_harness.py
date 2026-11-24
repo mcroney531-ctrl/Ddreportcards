@@ -161,7 +161,9 @@ class SpendCapTest(HarnessTestCase):
         for v in ("baseline", "candidate"):
             self.assertLessEqual(ledger[v]["usd"], 0.30)
             self.assertEqual(ledger[v]["model_calls"], 2)         # 3rd reservation (0.24 + 0.162) refused
-            self.assertEqual(ledger[v]["stopped_at_case"], "C1")
+        # The first refusal stops the whole run, with equal coverage.
+        self.assertEqual(ledger["run_stopped"]["reason"], "budget")
+        self.assertEqual(ledger["completed_turns"], {"baseline": 1, "candidate": 1})
 
     def test_approval_above_hard_cap_is_clamped(self):
         self.write_approval(50)
@@ -171,6 +173,41 @@ class SpendCapTest(HarnessTestCase):
 
     def test_pricing_comes_from_the_production_table(self):
         self.assertEqual(budget.price_of("claude-sonnet-5"), {"input": 2 * budget.USD, "output": 10 * budget.USD})
+
+
+class FailFastTest(HarnessTestCase):
+    def test_first_api_error_stops_the_whole_run(self):
+        calls = {"n": 0}
+        orig_init = FakeAnthropic.__init__
+
+        def failing_init(self, *a, **k):
+            orig_init(self, *a, **k)
+            real = self.messages.create
+
+            def create(**kw):
+                calls["n"] += 1
+                if calls["n"] > 2:   # baseline turn 1 ok (2 calls), then the account runs dry
+                    raise RuntimeError("Error code: 400 - {'type': 'error', 'error': {'type': "
+                                       "'invalid_request_error', 'message': 'Your credit balance is too low ROSTER'}}")
+                return real(**kw)
+            self.messages.create = create
+        with mock.patch.object(FakeAnthropic, "__init__", failing_init):
+            ledger = self.run_paid()
+        self.assertEqual(calls["n"], 3)                                  # nothing sent after the first error
+        self.assertEqual(ledger["run_stopped"]["reason"], "api_error")
+        self.assertEqual(ledger["run_stopped"]["detail"],
+                         {"status": 400, "type": "invalid_request_error", "kind": "credit_balance"})
+        self.assertNotIn("ROSTER", json.dumps(ledger))
+        self.assertEqual(ledger["completed_turns"], {"baseline": 1, "candidate": 0})
+
+    def test_turns_alternate_between_variants(self):
+        self.run_paid()
+        base, cand = FakeAnthropic.instances
+        # every turn: tool round + text round, baseline then candidate
+        self.assertEqual(len(base.creates), len(cand.creates))
+        ledger = json.loads((self.dir / "out" / "ledger.json").read_text())
+        self.assertIsNone(ledger["run_stopped"])
+        self.assertEqual(ledger["completed_turns"]["baseline"], ledger["completed_turns"]["candidate"])
 
 
 class CredentialScanTest(unittest.TestCase):
