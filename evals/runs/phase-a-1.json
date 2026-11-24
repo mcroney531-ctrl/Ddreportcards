@@ -1,0 +1,9 @@
+{
+ "run_id": "phase-a-1",
+ "approved_by": "owner and GPT review (in chat): paid evaluation authorized once the privacy and evidence conditions were met",
+ "approved_on": "2026-11-24",
+ "cap_usd_per_variant": 3,
+ "variants": ["baseline", "candidate"],
+ "combined_ceiling_usd": 6,
+ "retries": "none; no further paid runs without new approval"
+}
