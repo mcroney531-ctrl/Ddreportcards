@@ -130,6 +130,13 @@ def load_approval(path: str) -> dict:
             raise SystemExit(f"approval file missing {field!r}")
     if set(a["variants"]) - set(VARIANT_PROMPTS):
         raise SystemExit("approval names an unknown variant")
+    consumed = json.loads((pathlib.Path(__file__).parent / "consumed_runs.json").read_text())["consumed"]
+    if a["run_id"] in consumed:
+        raise SystemExit(f"approval {a['run_id']!r} is already consumed; a new paid run needs a new approval")
+    # A workflow re-run replays the original push, approval file included.
+    # Only the first attempt of a run may spend.
+    if os.environ.get("GITHUB_RUN_ATTEMPT", "1") != "1":
+        raise SystemExit("refusing a re-run: only the first attempt of a workflow run may spend")
     return a
 
 

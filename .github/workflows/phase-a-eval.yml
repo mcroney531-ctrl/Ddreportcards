@@ -66,7 +66,7 @@ jobs:
         run: |
           before="${{ github.event.before }}"
           if [ "$before" = "0000000000000000000000000000000000000000" ]; then before="$(git rev-list --max-parents=0 HEAD | tail -1)"; fi
-          files="$(git diff --name-only --diff-filter=AM "$before" "${{ github.sha }}" -- 'evals/runs/*.json')"
+          files="$(git diff --name-only --diff-filter=A "$before" "${{ github.sha }}" -- 'evals/runs/*.json')"
           count="$(printf '%s' "$files" | grep -c . || true)"
           if [ "$count" = "1" ]; then echo "file=$files" >> "$GITHUB_OUTPUT"; echo "approval: $files"; else echo "no single approval file in this push ($count)"; fi
       - uses: actions/upload-artifact@v4
@@ -75,7 +75,8 @@ jobs:
 
   paid:
     needs: checks
-    if: needs.checks.outputs.approval != ''
+    # First attempt only: a re-run replays the original push and its approval.
+    if: needs.checks.outputs.approval != '' && github.run_attempt == 1
     runs-on: ubuntu-latest
     timeout-minutes: 60
     env:

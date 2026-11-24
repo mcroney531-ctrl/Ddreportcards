@@ -92,6 +92,7 @@ class HarnessTestCase(unittest.TestCase):
                          frontend_baseline=str(SNAP / "baseline" / "frontend_capture.json"),
                          frontend_candidate=str(SNAP / "candidate" / "frontend_capture.json"))
         env = {"ANTHROPIC_EVAL_API_KEY": env_key} if env_key else {}
+        env["GITHUB_RUN_ATTEMPT"] = getattr(self, "run_attempt", "1")
         with mock.patch.dict(os.environ, env, clear=False), \
              mock.patch.object(run_eval.anthropic, "Anthropic", FakeAnthropic), \
              mock.patch.object(api, "_execute_chat_tool", stub):
@@ -102,6 +103,34 @@ class HarnessTestCase(unittest.TestCase):
 
 
 class RefusalTest(HarnessTestCase):
+    def test_consumed_approval_no_run(self):
+        for run_id in ("phase-a-1", "phase-a-2"):
+            with self.subTest(run_id):
+                self.approval.write_text(json.dumps({"run_id": run_id, "approved_by": "t", "approved_on": "t",
+                                                     "cap_usd_per_variant": 3, "variants": ["baseline", "candidate"]}))
+                with self.assertRaises(SystemExit):
+                    self.run_paid()
+        self.assertEqual(FakeAnthropic.instances, [])
+
+    def test_every_committed_approval_is_consumed(self):
+        root = pathlib.Path(run_eval.__file__).parent
+        consumed = json.loads((root / "consumed_runs.json").read_text())["consumed"]
+        for f in (root / "runs").glob("*.json"):
+            with self.subTest(f.name):
+                self.assertIn(json.loads(f.read_text())["run_id"], consumed)
+
+    def test_workflow_rerun_no_run(self):
+        self.run_attempt = "2"
+        with self.assertRaises(SystemExit):
+            self.run_paid()
+        self.assertEqual(FakeAnthropic.instances, [])
+
+    def test_workflow_spends_only_on_first_attempt_of_a_newly_added_approval(self):
+        wf = (pathlib.Path(run_eval.__file__).parent.parent / ".github" / "workflows" / "phase-a-eval.yml").read_text()
+        self.assertIn("github.run_attempt == 1", wf)
+        self.assertIn("--diff-filter=A ", wf)
+        self.assertNotIn("--diff-filter=AM", wf)
+
     def test_no_key_no_run(self):
         with self.assertRaises(SystemExit):
             self.run_paid(env_key="")

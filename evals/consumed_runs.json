@@ -1,0 +1,4 @@
+{
+ "_note": "Approval run_ids that have already been used (or were cut short). The harness refuses any approval whose run_id is listed here, so a consumed approval can't authorize another paid run, whatever triggers the workflow. Add a run_id here as soon as its run finishes.",
+ "consumed": ["phase-a-1", "phase-a-2"]
+}
