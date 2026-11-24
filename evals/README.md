@@ -58,8 +58,11 @@ The cap is clamped to `HARD_CAP_USD` ($3) in code, whatever the file says.
   tokens).
 - It settles to the actual cost afterwards. A failed call keeps its
   reservation.
-- A refused reservation stops that variant; partial results are still
-  reported.
+- The first refused reservation or model API error stops the whole run:
+  no further requests go to either variant. Partial results are still
+  reported, and the ledger records `run_stopped` (reason, case, turn,
+  variant, and an error kind only, never the raw message) plus
+  `completed_turns` per variant.
 - SDK retries are off (`max_retries=0`), and the harness never retries.
 - Spend is tracked under a fixed key per run, so the cap can't reset at
   midnight UTC.
@@ -68,5 +71,5 @@ The cap is clamped to `HARD_CAP_USD` ($3) in code, whatever the file says.
 ## Comparable evidence
 
 Both variants share one cache of tool responses. The first identical call
-goes live; every later one replays the recorded response. Cases run
-alternating between variants. The cache is saved with the results.
+goes live; every later one replays the recorded response. Turns alternate
+between variants, so a run cut short leaves both with equal coverage. The cache is saved with the results.
