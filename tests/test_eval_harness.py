@@ -139,7 +139,9 @@ class SameExecutionPathTest(HarnessTestCase):
 
 class SharedEvidenceTest(HarnessTestCase):
     def test_each_distinct_tool_call_runs_once_and_replays_for_the_other_variant(self):
-        self.run_paid()
+        # The post-run drift audit deliberately re-fetches everything; leave it out here.
+        with mock.patch.object(run_eval, "audit_drift", lambda cache: {}):
+            self.run_paid()
         self.assertEqual(len(self.tool_calls), len(set(self.tool_calls)))
         cand = json.loads((self.dir / "out" / "transcripts.candidate.json").read_text())
         sources = [t["source"] for turn in cand["C1"]["turns"] for t in turn["tools"]]
@@ -180,6 +182,101 @@ class CredentialScanTest(unittest.TestCase):
             pathlib.Path(d, "x.json").write_text('{"ok": true}')
             run_eval.scan_for_credentials(pathlib.Path(d))
 
+
+
+class PublicArtifactSafetyTest(unittest.TestCase):
+    """The repo is public: paid outputs leave the runner only sealed."""
+    ROOT = pathlib.Path(__file__).resolve().parent.parent
+
+    def test_roundtrip_seal_deletes_plaintext_and_only_the_private_key_opens_it(self):
+        import shutil
+        import subprocess
+        with tempfile.TemporaryDirectory() as d:
+            d = pathlib.Path(d)
+            (d / "evals").mkdir()
+            for f in ("seal_results.sh", "unseal_results.sh"):
+                shutil.copy(self.ROOT / "evals" / f, d / "evals" / f)
+            subprocess.run(["openssl", "genpkey", "-algorithm", "RSA", "-pkeyopt", "rsa_keygen_bits:2048",
+                            "-out", str(d / "priv.pem")], check=True, capture_output=True)
+            subprocess.run(["openssl", "pkey", "-in", str(d / "priv.pem"), "-pubout",
+                            "-out", str(d / "evals" / "results_pubkey.pem")], check=True, capture_output=True)
+            plain = d / "paid"
+            plain.mkdir()
+            (plain / "transcripts.candidate.json").write_text('{"reply": "ROSTER-SECRET-MARKER"}')
+            (plain / "ledger.json").write_text('{"candidate": {"usd": 1.23}}')
+            subprocess.run(["bash", str(d / "evals" / "seal_results.sh"), str(plain), str(d / "up")],
+                           check=True, capture_output=True)
+            self.assertFalse(plain.exists())
+            self.assertEqual(sorted(p.name for p in (d / "up").iterdir()),
+                             ["ledger.json", "results.key.enc", "results.tgz.enc"])
+            for p in (d / "up").iterdir():
+                self.assertNotIn(b"ROSTER-SECRET-MARKER", p.read_bytes())
+            subprocess.run(["bash", str(d / "evals" / "unseal_results.sh"), str(d / "priv.pem"), str(d / "up"),
+                            str(d / "out")], check=True, capture_output=True)
+            self.assertIn("ROSTER-SECRET-MARKER", (d / "out" / "transcripts.candidate.json").read_text())
+
+    def test_only_a_public_key_is_committed(self):
+        pub = (self.ROOT / "evals" / "results_pubkey.pem").read_text()
+        self.assertIn("BEGIN PUBLIC KEY", pub)
+        for p in self.ROOT.rglob("*"):
+            if p.is_file() and ".git" not in p.parts and p.suffix in (".pem", ".key", ".txt", ".json", ".py", ".sh", ".yml"):
+                with self.subTest(str(p.relative_to(self.ROOT))):
+                    self.assertNotIn("PRIVATE " + "KEY-----", p.read_text(errors="ignore"))
+
+    def test_workflow_uploads_only_sealed_results_and_smoke_status(self):
+        wf = (self.ROOT / ".github" / "workflows" / "phase-a-eval.yml").read_text()
+        uploads = [l for l in wf.splitlines() if "upload-artifact" in l or "path:" in l and "name:" in l]
+        paths = [l.split("path:")[1].split(",")[0].strip() for l in wf.splitlines() if "path: _eval" in l]
+        self.assertEqual(sorted(paths), ["_eval_out/smoke", "_eval_upload"])
+        self.assertIn("bash evals/seal_results.sh _eval_out/paid _eval_upload", wf)
+        self.assertLess(wf.index("seal_results.sh"), wf.index("name: eval-results-sealed"))
+        self.assertTrue(uploads)
+
+
+class EvidenceChecksTest(unittest.TestCase):
+    def test_drift_audit_reports_changed_responses_by_tool_name_only(self):
+        with tempfile.TemporaryDirectory() as d:
+            cache = run_eval.ToolCache(pathlib.Path(d, "c.json"))
+            cache.entries = {
+                "a": {"name": "get_player_stats", "input": {"sleeper_id": "1"}, "latest_user_text": "x",
+                      "result": {"ypc": 4.0}},
+                "b": {"name": "get_roster", "input": {"owner": "o"}, "latest_user_text": "x",
+                      "result": {"players": ["P1"]}},
+            }
+            live = {"get_player_stats": {"ypc": 4.4}, "get_roster": {"players": ["P1"]}}
+            with mock.patch.object(api, "_execute_chat_tool", lambda n, i, t="": live[n]):
+                out = run_eval.audit_drift(cache)
+        self.assertEqual(out, {"rechecked": 2, "changed": 1, "changed_tools": ["get_player_stats"], "errors": 0})
+
+    def test_frontend_parity_allows_only_the_phase_a_sentences(self):
+        base = json.loads((SNAP / "baseline" / "frontend_capture.json").read_text())
+        cand = json.loads((SNAP / "candidate" / "frontend_capture.json").read_text())
+        self.assertTrue(run_eval.frontend_parity({"baseline": base, "candidate": cand})["identical_except_phase_a"])
+        drifted = json.loads(json.dumps(cand))
+        drifted["liveSystemPrompt"] = drifted["liveSystemPrompt"].replace("Kyle Williams", "Someone Else")
+        self.assertFalse(run_eval.frontend_parity({"baseline": base, "candidate": drifted})["identical_except_phase_a"])
+
+
+class LedgerIsPublicSafeTest(HarnessTestCase):
+    def test_ledger_holds_numbers_and_tool_names_only(self):
+        self.run_paid()
+        text = (self.dir / "out" / "ledger.json").read_text()
+        for leak in ("Offer: I give", "I like 3rds", "reply", "Aaron Jones", "stub"):
+            with self.subTest(leak):
+                self.assertNotIn(leak, text)
+        ledger = json.loads(text)
+        self.assertIn("drift_audit", ledger["evidence"])
+        self.assertIn("frontend_parity", ledger["evidence"])
+
+    def test_unexpected_failure_reports_type_only(self):
+        with mock.patch.object(run_eval, "paid", side_effect=ValueError("ROSTER-SECRET-MARKER")), \
+             mock.patch("sys.argv", ["run_eval", "paid", "--out", str(self.dir / "o")]), \
+             mock.patch("sys.stderr") as err:
+            (self.dir / "o").mkdir()
+            self.assertEqual(run_eval.main(), 1)
+        written = "".join(c.args[0] for c in err.write.call_args_list)
+        self.assertIn("ValueError", written)
+        self.assertNotIn("ROSTER-SECRET-MARKER", written)
 
 if __name__ == "__main__":
     unittest.main()

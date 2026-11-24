@@ -85,8 +85,8 @@ class ToolCache:
                 result, source = self.entries[k]["result"], "replay"
             else:
                 result = api._execute_chat_tool(name, tool_input, latest_user_text)
-                self.entries[k] = {"name": name, "input": tool_input, "result": result,
-                                   "first_by": variant, "at": time.time()}
+                self.entries[k] = {"name": name, "input": tool_input, "latest_user_text": latest_user_text,
+                                   "result": result, "first_by": variant, "at": time.time()}
                 self.misses.append({"variant": variant, "name": name})
                 source = "live"
             log.append({"name": name, "input": tool_input, "source": source, "result": result})
@@ -204,11 +204,14 @@ def paid(args):
             if not ok:
                 s["stopped"] = case["id"]
     cache.save()
+    drift = audit_drift(cache)
+    parity = frontend_parity(frontends)
     ledger = {v: {"usd": round(s["meter"].usd, 4), "cap_usd": cap_usd, "model_calls": len(s["meter"].calls),
                   "input_tokens": sum(c["input_tokens"] for c in s["meter"].calls),
                   "output_tokens": sum(c["output_tokens"] for c in s["meter"].calls),
                   "stopped_at_case": s["stopped"]} for v, s in state.items()}
     ledger["tool_cache"] = {"entries": len(cache.entries), "live_misses": cache.misses}
+    ledger["evidence"] = {"drift_audit": drift, "frontend_parity": parity}
     (out / "ledger.json").write_text(json.dumps(ledger, indent=1))
     for v, s in state.items():
         (out / f"transcripts.{v}.json").write_text(json.dumps(s["transcripts"], indent=1, default=str))
@@ -220,6 +223,53 @@ def paid(args):
     (out / "blind_key.json").write_text(json.dumps(mapping))
     print(json.dumps(ledger, indent=1))
 
+
+
+# ── evidence checks (paid) ──────────────────────────────────────────────────
+def audit_drift(cache: "ToolCache") -> dict:
+    """Re-fetch every recorded tool response after both variants finish.
+
+    Identical calls already replay identical responses. A call only one variant
+    made went live once, minutes from the other variant's calls. If nothing in
+    the cache changed by the end of the run, every response either variant saw
+    was current for the whole window, including the calls it alone made.
+    Reports tool names and counts only, never response content.
+    """
+    changed, errors = [], 0
+    for entry in cache.entries.values():
+        try:
+            now = api._execute_chat_tool(entry["name"], entry["input"], entry.get("latest_user_text", ""))
+        except Exception:  # noqa: BLE001
+            errors += 1
+            continue
+        if json.dumps(now, sort_keys=True, default=str) != json.dumps(entry["result"], sort_keys=True, default=str):
+            changed.append(entry["name"])
+    return {"rechecked": len(cache.entries), "changed": len(changed), "changed_tools": sorted(set(changed)),
+            "errors": errors}
+
+
+A9 = ("When evaluating trades give a clear verdict.", "When he asks for a verdict, give a clear one.")
+A10 = ("so a live lookup OVERRIDES it: call ",
+       "so when one of those facts matters to your answer, a live lookup overrides it: call ")
+
+
+def frontend_parity(frontends: dict) -> dict:
+    """The two app captures must differ only by the A9/A10 sentences.
+
+    Both are captured from live Sleeper seconds apart; if league data changed in
+    between, the variants would see different rosters. Normalise the two
+    approved edits and require everything else to be identical.
+    """
+    if set(frontends) != {"baseline", "candidate"}:
+        return {"checked": False}
+
+    def norm(cap):
+        text = json.dumps({k: cap[k] for k in ("liveSystemPrompt", "contexts")}, sort_keys=True)
+        for old, new in (A9, A10):
+            text = text.replace(old, new)
+        return text
+
+    return {"checked": True, "identical_except_phase_a": norm(frontends["baseline"]) == norm(frontends["candidate"])}
 
 # ── smoke ───────────────────────────────────────────────────────────────────
 def smoke(args):
@@ -279,7 +329,15 @@ def main():
     ap.add_argument("--frontend-baseline")
     ap.add_argument("--frontend-candidate")
     args = ap.parse_args()
-    rc = smoke(args) if args.mode == "smoke" else (paid(args) or 0)
+    try:
+        rc = smoke(args) if args.mode == "smoke" else (paid(args) or 0)
+    except SystemExit:
+        raise
+    except Exception as exc:  # noqa: BLE001
+        # CI logs are public: report the failure by type only, never a
+        # traceback that could carry roster or transcript content.
+        print(f"evaluation failed: {type(exc).__name__}", file=sys.stderr)
+        rc = 1
     scan_for_credentials(pathlib.Path(args.out))
     return rc
 

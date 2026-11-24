@@ -112,6 +112,11 @@ jobs:
           python -m evals.run_eval paid --approval "${{ needs.checks.outputs.approval }}" --out _eval_out/paid \
             --frontend-baseline _eval_out/paid/frontend.baseline.json \
             --frontend-candidate _eval_out/paid/frontend.candidate.json
+      - name: Seal results (public repo; only the encrypted bundle and the numbers-only ledger leave)
+        if: always()
+        run: |
+          if [ -d _eval_out/paid ]; then bash evals/seal_results.sh _eval_out/paid _eval_upload; fi
+          rm -rf _eval_out
       - uses: actions/upload-artifact@v4
         if: always()
-        with: { name: eval-results, path: _eval_out/paid, retention-days: 7, if-no-files-found: ignore }
+        with: { name: eval-results-sealed, path: _eval_upload, retention-days: 7, if-no-files-found: ignore }
