@@ -1,0 +1,10 @@
+{
+ "run_id": "phase-a-2",
+ "approved_by": "owner and GPT review (in chat): rerun after phase-a-1 was cut short by an empty credit balance",
+ "approved_on": "2026-11-24",
+ "cap_usd_per_variant": 3,
+ "variants": ["baseline", "candidate"],
+ "combined_ceiling_usd": 6,
+ "retries": "none; stop on first error; no further paid runs without new approval",
+ "excludes": "phase-a-1 (unscorable, excluded from the comparison)"
+}
